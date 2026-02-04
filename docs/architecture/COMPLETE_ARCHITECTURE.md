@@ -12,8 +12,8 @@ THALOS Prime is a comprehensive AI system with advanced visualization, processin
 - **Error Handling**: Comprehensive exception handling and graceful degradation
 
 ### Layer 2: Mathematical Foundation
-- **Tensor Operations**: N-dimensional tensor support with broadcasting
-- **Linear Algebra**: Matrix multiplication, transpose, decomposition
+- **Tensor Operations**: N-dimensional tensor support with basic elementwise operations
+- **Linear Algebra**: Matrix multiplication, transpose, dot products
 - **Activations**: ReLU, Sigmoid, Tanh, Softmax
 - **Distributions**: Normal, uniform, Xavier initialization
 
