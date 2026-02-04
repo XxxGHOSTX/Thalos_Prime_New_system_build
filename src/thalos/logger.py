@@ -4,11 +4,9 @@ Provides structured logging with rotation, filtering, and multiple outputs
 """
 import logging
 import logging.handlers
-import os
 import sys
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
 
 
 class ColoredFormatter(logging.Formatter):
@@ -24,12 +22,6 @@ class ColoredFormatter(logging.Formatter):
     }
     
     def format(self, record):
-        if sys.stdout.isatty():  # Only add colors if output is a terminal
-            # Save original levelname to avoid polluting other handlers
-            original_levelname = record.levelname
-            if original_levelname in self.COLORS:
-                record.levelname = f"{self.COLORS[original_levelname]}{original_levelname}{self.COLORS['RESET']}"
-            try:
         # Preserve the original level name so other handlers see an unmodified record
         original_levelname = record.levelname
         try:

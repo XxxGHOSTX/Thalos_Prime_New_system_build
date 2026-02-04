@@ -14,7 +14,7 @@ class DatabaseManager:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.connection: Optional[sqlite3.Connection] = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # Use RLock for reentrant locking
         self._initialize_database()
     
     def _initialize_database(self):
@@ -57,10 +57,11 @@ class DatabaseManager:
     
     def get_connection(self) -> sqlite3.Connection:
         """Get database connection"""
-        if self.connection is None:
-            self.connection = sqlite3.connect(self.db_path, check_same_thread=False)
-            self.connection.row_factory = sqlite3.Row
-        return self.connection
+        with self._lock:
+            if self.connection is None:
+                self.connection = sqlite3.connect(self.db_path, check_same_thread=False)
+                self.connection.row_factory = sqlite3.Row
+            return self.connection
     
     def close(self):
         """Close database connection"""
@@ -79,7 +80,8 @@ class DatabaseManager:
                 conn.commit()
                 return cursor.lastrowid
             except sqlite3.IntegrityError:
-                # Session already exists, return None
+                # Session already exists or other integrity issue; rollback to keep connection clean
+                conn.rollback()
                 return None
     
     def log_interaction(self, session_id: str, input_text: str, output_text: str, 
