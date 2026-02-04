@@ -537,10 +537,66 @@ class Seq2SeqModel(Layer):
         return logits
 
 
+class ModelUtils:
+    """
+    Utility functions for model operations
+    """
+    
+    @staticmethod
+    def count_parameters(model: Layer) -> int:
+        """
+        Count total number of parameters in a model
+        
+        Args:
+            model: Model instance
+            
+        Returns:
+            Total parameter count
+        """
+        total = 0
+        
+        # Count parameters in all layer attributes
+        for attr_name in dir(model):
+            attr = getattr(model, attr_name)
+            
+            # Check if it's a layer
+            if isinstance(attr, Layer):
+                # Recursively count parameters
+                total += ModelUtils.count_parameters(attr)
+            
+            # Check if it's a tensor (parameter)
+            elif isinstance(attr, Tensor):
+                total += attr.shape.size
+        
+        return total
+    
+    @staticmethod
+    def model_summary(model: Layer) -> str:
+        """
+        Generate a summary of model architecture
+        
+        Args:
+            model: Model instance
+            
+        Returns:
+            Summary string
+        """
+        summary = []
+        summary.append("="*60)
+        summary.append(f"Model: {model.__class__.__name__}")
+        summary.append("="*60)
+        
+        total_params = ModelUtils.count_parameters(model)
+        summary.append(f"Total Parameters: {total_params:,}")
+        
+        return "\n".join(summary)
+
+
 __all__ = [
     'THALOSPrimeModel',
     'ModelOptimizer',
     'LossFunction',
     'SimpleClassifier',
     'Seq2SeqModel',
+    'ModelUtils',
 ]
