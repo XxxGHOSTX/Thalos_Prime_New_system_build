@@ -1,0 +1,15 @@
+# Development Environment Configuration
+application:
+  debug: true
+  hot_reload: true
+
+logging:
+  level: "DEBUG"
+  console: true
+
+api:
+  cors_enabled: true
+  auth_enabled: false
+
+performance:
+  enable_profiling: true
