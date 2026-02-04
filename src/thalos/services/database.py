@@ -2,7 +2,6 @@
 Database Integration Layer for THALOS Prime
 """
 import sqlite3
-import json
 import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
