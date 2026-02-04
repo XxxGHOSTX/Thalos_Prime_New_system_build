@@ -26,7 +26,11 @@ class SecureHash:
 
 
 class AES256:
-    """Simple AES-256-like encryption (simplified for minimal implementation)"""
+    """Simple XOR-based encryption (not actual AES-256, simplified for minimal implementation)
+    
+    Note: This is a basic XOR cipher for demonstration purposes.
+    For production use, use a proper cryptography library like cryptography or pycryptodome.
+    """
     
     def __init__(self, password):
         self.password = password

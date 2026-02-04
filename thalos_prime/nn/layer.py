@@ -1,6 +1,8 @@
 """
 Neural network layer implementations for THALOS Prime
 """
+import math
+import random
 from ..math import Tensor, randn, zeros, LinearAlgebra, Distributions
 
 
@@ -87,7 +89,6 @@ class PositionalEncoding:
         self.d_model = d_model
         self.max_len = max_len
         # Pre-compute positional encodings
-        import math
         pe = []
         for pos in range(max_len):
             for i in range(d_model):
@@ -119,7 +120,6 @@ class Dropout:
         
         # Simple dropout implementation
         if isinstance(x, Tensor):
-            import random
             mask = [1.0 if random.random() > self.p else 0.0 for _ in x.data]
             scale = 1.0 / (1.0 - self.p)
             result_data = [val * m * scale for val, m in zip(x.data, mask)]
