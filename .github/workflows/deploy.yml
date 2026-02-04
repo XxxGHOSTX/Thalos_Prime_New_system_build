@@ -65,6 +65,8 @@ jobs:
     
     - name: Run tests
       run: |
+        # Add src to Python path for test_complete_system.py
+        export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
         python test_system.py
         python test_complete_system.py
         echo "✓ All tests passed for production deployment"

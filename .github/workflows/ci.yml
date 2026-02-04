@@ -39,7 +39,8 @@ jobs:
     
     - name: Check code quality
       run: |
-        python -m py_compile $(python -c "import os; import sys; print(' '.join([os.path.join(root, f) for root, dirs, files in os.walk('.') for f in files if f.endswith('.py') and '.git' not in root and '__pycache__' not in root]))")
+        # Compile all Python files to check for syntax errors
+        git ls-files '*.py' | xargs python -m py_compile
         echo "✓ Code quality check passed"
       shell: bash
 
@@ -106,7 +107,15 @@ jobs:
       run: |
         echo "Building THALOS Prime package..."
         python -m build
+        ls -lh dist/
         echo "✓ Build completed successfully"
+    
+    - name: Verify package contents
+      run: |
+        echo "Verifying package contents..."
+        python -m pip install dist/*.whl
+        python -c "import thalos_prime; import thalos; print('✓ Packages import successfully')"
+        echo "✓ Package verification passed"
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4

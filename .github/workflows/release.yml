@@ -32,12 +32,23 @@ jobs:
     
     - name: Run tests
       run: |
+        # Add src to Python path
+        export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
         python test_system.py
         python test_complete_system.py
+        echo "✓ All tests passed"
     
     - name: Build package
       run: |
         python -m build
+        echo "Package contents:"
+        ls -lh dist/
+    
+    - name: Verify package
+      run: |
+        # Install and test the built package
+        python -m pip install dist/*.whl
+        python -c "import thalos_prime; import thalos; print('✓ Package verified')"
     
     - name: Create Release Notes
       id: release_notes

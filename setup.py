@@ -17,8 +17,8 @@ setup(
     long_description_content_type="text/markdown",
     author="THALOS Prime Systems",
     python_requires=">=3.11",
-    packages=find_packages(include=["thalos_prime", "thalos_prime.*"]) + find_packages(where="src"),
-    package_dir={"": ".", "thalos": "src/thalos"},
+    packages=find_packages(include=["thalos_prime", "thalos_prime.*"]) + find_packages(where="src", include=["thalos", "thalos.*"]),
+    package_dir={"thalos": "src/thalos"},
     py_modules=["thalos_app"],
     install_requires=[
         "pyyaml>=6.0",

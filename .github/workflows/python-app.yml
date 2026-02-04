@@ -34,8 +34,9 @@ jobs:
     
     - name: Lint with basic checks
       run: |
-        # Use git ls-files for portability
-        python -m py_compile $(git ls-files '*.py' || python -c "import os; print(' '.join([os.path.join(r,f) for r,d,files in os.walk('.') for f in files if f.endswith('.py') and '.git' not in r]))")
+        # Use git ls-files for portability and reliability
+        git ls-files '*.py' | xargs python -m py_compile
+        echo "✓ Syntax check passed"
       shell: bash
     
     - name: Test with pytest

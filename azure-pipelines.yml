@@ -46,20 +46,18 @@ stages:
       displayName: 'Install dependencies'
     
     - script: |
-        python -m py_compile $(find . -name "*.py" -not -path "./.git/*" -not -path "./__pycache__/*" -not -path "./venv/*")
+        # Use Python-based file discovery for cross-platform compatibility
+        python -c "import os; import py_compile; [py_compile.compile(os.path.join(r,f), doraise=True) for r,d,files in os.walk('.') for f in files if f.endswith('.py') and '.git' not in r and '__pycache__' not in r and 'venv' not in r]"
       displayName: 'Check syntax'
     
     - script: |
+        export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
         python test_system.py
         python test_complete_system.py
       displayName: 'Run tests'
     
-    - task: PublishTestResults@2
-      condition: succeededOrFailed()
-      inputs:
-        testResultsFiles: '**/test-*.xml'
-        testRunTitle: 'Python $(python.version)'
-      displayName: 'Publish test results'
+    # Note: Tests don't produce JUnit XML, so we skip PublishTestResults
+    # If needed, configure pytest to generate XML with: pytest --junitxml=test-results.xml
 
 - stage: SecurityScan
   displayName: 'Security Scanning'
