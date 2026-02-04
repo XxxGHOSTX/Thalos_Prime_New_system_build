@@ -38,6 +38,8 @@ Repository = "https://github.com/XxxGHOSTX/Thalos_Prime_New_system_build"
 [project.scripts]
 thalos-prime = "thalos_app:main"
 
+[tool.setuptools]
+py-modules = ["thalos_app"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["thalos_prime*", "thalos*"]
