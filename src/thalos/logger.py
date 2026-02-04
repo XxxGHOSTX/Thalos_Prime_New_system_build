@@ -30,11 +30,17 @@ class ColoredFormatter(logging.Formatter):
             if original_levelname in self.COLORS:
                 record.levelname = f"{self.COLORS[original_levelname]}{original_levelname}{self.COLORS['RESET']}"
             try:
-                return super().format(record)
-            finally:
-                # Restore original levelname for other handlers
-                record.levelname = original_levelname
-        return super().format(record)
+        # Preserve the original level name so other handlers see an unmodified record
+        original_levelname = record.levelname
+        try:
+            if sys.stdout.isatty():  # Only add colors if output is a terminal
+                levelname = record.levelname
+                if levelname in self.COLORS:
+                    record.levelname = f"{self.COLORS[levelname]}{levelname}{self.COLORS['RESET']}"
+            return super().format(record)
+        finally:
+            # Restore the original level name to avoid leaking ANSI codes to other handlers
+            record.levelname = original_levelname
 
 
 class LogManager:
