@@ -106,6 +106,11 @@ class THALOSPrimeModel(Layer):
             
         Returns:
             Generated token IDs
+            
+        Note:
+            If the generated sequence exceeds the model's max_seq_len from initialization,
+            the model will raise a ValueError. Consider implementing sliding window or
+            truncation strategies for longer sequences.
         """
         self.eval()
         generated = list(prompt_ids)
