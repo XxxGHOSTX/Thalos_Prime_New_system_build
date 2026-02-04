@@ -498,17 +498,37 @@ class AES256:
     
     def _aes_cbc_encrypt_pure(self, plaintext: bytes, key: bytes, iv: bytes) -> bytes:
         """
-        Pure Python AES-CBC encryption fallback using XOR approximation.
-        NOTE: This is a simplified implementation for compatibility.
+        Pure Python AES-CBC encryption fallback using SHA-256 approximation.
+        
+        WARNING: This is NOT cryptographically equivalent to actual AES-CBC.
+        This fallback uses SHA-256 hashing to approximate block cipher behavior
+        for compatibility when the cryptography library is unavailable.
+        
+        For production security, install the cryptography library:
+            pip install cryptography
+        
+        This implementation should ONLY be used for testing or non-security purposes.
         """
+        import warnings
+        warnings.warn(
+            "Using pure Python AES fallback which is NOT cryptographically secure. "
+            "Install 'cryptography' library for production use.",
+            SecurityWarning,
+            stacklevel=3
+        )
+        
         from hashlib import sha256
-        blocks = [plaintext[i:i+16] for i in range(0, len(plaintext), 16)]
+        # AES block size is 16 bytes (128 bits)
+        AES_BLOCK_SIZE = 16
+        blocks = [plaintext[i:i+AES_BLOCK_SIZE] for i in range(0, len(plaintext), AES_BLOCK_SIZE)]
         ciphertext = b''
         prev_block = iv
         
         for block in blocks:
+            # CBC mode: XOR plaintext with previous ciphertext block
             xor_block = bytes(b ^ p for b, p in zip(block, prev_block))
-            cipher_block = sha256(key + xor_block).digest()[:16]
+            # Approximate block cipher with SHA-256 (not actual AES)
+            cipher_block = sha256(key + xor_block).digest()[:AES_BLOCK_SIZE]
             ciphertext += cipher_block
             prev_block = cipher_block
         
@@ -516,26 +536,43 @@ class AES256:
     
     def _aes_cbc_decrypt_pure(self, ciphertext: bytes, key: bytes, iv: bytes) -> bytes:
         """
-        Pure Python AES-CBC decryption fallback using XOR approximation.
-        NOTE: This is a simplified implementation for compatibility.
+        Pure Python AES-CBC decryption fallback using SHA-256 approximation.
+        
+        WARNING: This is NOT cryptographically equivalent to actual AES-CBC.
+        See _aes_cbc_encrypt_pure() for security warnings.
         """
+        import warnings
+        warnings.warn(
+            "Using pure Python AES fallback which is NOT cryptographically secure. "
+            "Install 'cryptography' library for production use.",
+            SecurityWarning,
+            stacklevel=3
+        )
+        
         from hashlib import sha256
-        blocks = [ciphertext[i:i+16] for i in range(0, len(ciphertext), 16)]
+        # AES block size is 16 bytes (128 bits)
+        AES_BLOCK_SIZE = 16
+        blocks = [ciphertext[i:i+AES_BLOCK_SIZE] for i in range(0, len(ciphertext), AES_BLOCK_SIZE)]
         plaintext = b''
         prev_block = iv
         
         for cipher_block in blocks:
+            # Attempt to reverse the SHA-256 approximation (limited iterations)
             xor_block_candidate = cipher_block
-            for _ in range(16):
-                test = sha256(key + xor_block_candidate).digest()[:16]
+            MAX_REVERSE_ATTEMPTS = 16  # Limit brute force attempts
+            for _ in range(MAX_REVERSE_ATTEMPTS):
+                test = sha256(key + xor_block_candidate).digest()[:AES_BLOCK_SIZE]
                 if test == cipher_block:
                     break
+                # Try incrementing first byte
                 xor_block_candidate = bytes((xor_block_candidate[i] + 1) % 256 
                                            if i == 0 else xor_block_candidate[i] 
-                                           for i in range(16))
+                                           for i in range(AES_BLOCK_SIZE))
             else:
-                xor_block_candidate = bytes(c ^ p for c, p in zip(cipher_block, key[:16]))
+                # Fallback if reversal fails
+                xor_block_candidate = bytes(c ^ p for c, p in zip(cipher_block, key[:AES_BLOCK_SIZE]))
             
+            # CBC mode: XOR with previous ciphertext block
             block = bytes(x ^ p for x, p in zip(xor_block_candidate, prev_block))
             plaintext += block
             prev_block = cipher_block
