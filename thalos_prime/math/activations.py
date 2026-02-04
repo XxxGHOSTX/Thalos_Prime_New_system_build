@@ -8,6 +8,10 @@ import math
 from typing import Optional
 from .tensor import Tensor, zeros
 
+# Constants for numerical stability
+SIGMOID_CLIP_MIN = -500
+SIGMOID_CLIP_MAX = 500
+
 
 class Activations:
     """Collection of activation functions"""
@@ -37,7 +41,7 @@ class Activations:
         """Sigmoid activation: 1 / (1 + exp(-x))"""
         def _sigmoid(val):
             # Clip to prevent overflow
-            val = max(-500, min(500, val))
+            val = max(SIGMOID_CLIP_MIN, min(SIGMOID_CLIP_MAX, val))
             return 1.0 / (1.0 + math.exp(-val))
         
         return Tensor([_sigmoid(val) for val in x.data], x.shape)

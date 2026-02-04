@@ -6,7 +6,7 @@ Pure Python implementation of matrix operations
 
 import math
 from typing import Optional, Tuple, List
-from .tensor import Tensor, zeros, ones, eye
+from .tensor import Tensor, zeros, ones, eye, Shape
 
 
 class LinearAlgebra:
@@ -36,7 +36,7 @@ class LinearAlgebra:
                         total += a.data[i * k1 + k] * b.data[k * n + j]
                     result_data.append(total)
             
-            from .tensor import Shape
+            # Shape imported at module level
             return Tensor(result_data, Shape(m, n))
         
         # Batched case - simplified
@@ -52,7 +52,7 @@ class LinearAlgebra:
                         total += a.data[a_idx] * b.data[b_idx]
                 result_data.append(total)
         
-        from .tensor import Shape
+        # Shape imported at module level
         return Tensor(result_data, Shape(m, n))
     
     @staticmethod
@@ -74,7 +74,7 @@ class LinearAlgebra:
             for b_val in b_flat.data:
                 result_data.append(a_val * b_val)
         
-        from .tensor import Shape
+        # Shape imported at module level
         return Tensor(result_data, Shape(len(a_flat.data), len(b_flat.data)))
     
     @staticmethod
@@ -177,7 +177,7 @@ class LinearAlgebra:
             for j in range(n):
                 q_data.append(q_columns[j][i])
         
-        from .tensor import Shape
+        # Shape imported at module level
         Q = Tensor(q_data, Shape(m, n))
         R = Tensor(r_data, Shape(n, n))
         
@@ -334,7 +334,7 @@ class LinearAlgebra:
                     val -= aug[i * cols + k] * solution[k * num_rhs + j]
                 solution[i * num_rhs + j] = val / aug[i * cols + i]
         
-        from .tensor import Shape
+        # Shape imported at module level
         if num_rhs == 1:
             return Tensor(solution, Shape(n,))
         return Tensor(solution, Shape(n, num_rhs))
@@ -459,7 +459,7 @@ class LinearAlgebra:
             for j in range(n):
                 inv_data.append(aug[i * cols + n + j])
         
-        from .tensor import Shape
+        # Shape imported at module level
         return Tensor(inv_data, Shape(n, n))
     
     @staticmethod
@@ -468,7 +468,10 @@ class LinearAlgebra:
         Simplified SVD using eigendecomposition
         Returns U, S, V^T such that A = U @ S @ V^T
         
-        Note: This is a simplified version that may not be as accurate as full SVD
+        Note: This is a SIMPLIFIED implementation for educational purposes.
+        It only computes the first singular value/vector via power iteration.
+        For production use, implement full SVD or use a library.
+        The U matrix returned is currently just an identity placeholder.
         """
         if a.shape.ndim != 2:
             raise ValueError("SVD requires 2D matrix")
@@ -490,7 +493,7 @@ class LinearAlgebra:
         for i in range(min(len(singular_values), min(m, n))):
             s_data[i * min(m, n) + i] = singular_values[i]
         
-        from .tensor import Shape
+        # Shape imported at module level
         s = Tensor(s_data, Shape(min(m, n), min(m, n)))
         
         # For full SVD we'd compute U = A V S^-1

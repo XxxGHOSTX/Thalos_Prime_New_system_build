@@ -312,7 +312,7 @@ class Distributions:
                         q_data[i * cols + j] *= d[j] * gain
             
             return Tensor(q_data, Shape(rows, cols))
-        except:
+        except Exception:
             # Fallback to xavier if QR fails
             return Distributions.xavier_normal(cols, rows)
     
