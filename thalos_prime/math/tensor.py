@@ -274,6 +274,28 @@ class Tensor:
             val = other.data[0]
             return Tensor([op(x, val) for x in self.data], self.shape)
         
+        # Handle broadcasting with different ndim (e.g., (32, 5) + (5,))
+        if self.shape.ndim != other.shape.ndim:
+            # Try to broadcast smaller tensor
+            if other.shape.ndim == 1 and self.shape.ndim == 2:
+                # Broadcasting (m, n) + (n,) -> (m, n)
+                rows, cols = self.shape.dims
+                if cols == other.shape.dims[0]:
+                    result_data = []
+                    for i in range(rows):
+                        for j in range(cols):
+                            result_data.append(op(self.data[i * cols + j], other.data[j]))
+                    return Tensor(result_data, Shape(rows, cols))
+            elif self.shape.ndim == 1 and other.shape.ndim == 2:
+                # Broadcasting (n,) + (m, n) -> (m, n)
+                rows, cols = other.shape.dims
+                if self.shape.dims[0] == cols:
+                    result_data = []
+                    for i in range(rows):
+                        for j in range(cols):
+                            result_data.append(op(self.data[j], other.data[i * cols + j]))
+                    return Tensor(result_data, Shape(rows, cols))
+        
         # More complex broadcasting
         if self.shape.ndim == other.shape.ndim:
             can_broadcast = True
