@@ -1,7 +1,7 @@
 """
 Transformer architecture for THALOS Prime
 """
-from ..math import Tensor, zeros
+from ..math import Tensor
 from .layer import Linear, Dropout
 
 

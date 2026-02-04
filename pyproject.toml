@@ -38,14 +38,16 @@ Repository = "https://github.com/XxxGHOSTX/Thalos_Prime_New_system_build"
 [project.scripts]
 thalos-prime = "thalos_app:main"
 
-[tool.setuptools]
-packages = ["thalos_prime", "src.thalos"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["thalos_prime*", "thalos*"]
 
-[tool.setuptools.package-data]
-thalos_prime = ["py.typed"]
+[tool.setuptools.package-dir]
+"" = "."
+"thalos" = "src/thalos"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["."]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

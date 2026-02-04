@@ -39,7 +39,7 @@ jobs:
     
     - name: Check code quality
       run: |
-        python -m py_compile $(find . -name "*.py" -not -path "./.git/*" -not -path "./__pycache__/*")
+        python -m py_compile $(python -c "import os; import sys; print(' '.join([os.path.join(root, f) for root, dirs, files in os.walk('.') for f in files if f.endswith('.py') and '.git' not in root and '__pycache__' not in root]))")
         echo "✓ Code quality check passed"
       shell: bash
 
@@ -106,7 +106,7 @@ jobs:
     - name: Build package
       run: |
         echo "Building THALOS Prime package..."
-        python -m pip install --upgrade build
+        python -m build
         echo "✓ Build completed successfully"
     
     - name: Upload artifacts
@@ -114,7 +114,5 @@ jobs:
       with:
         name: thalos-prime-${{ github.sha }}
         path: |
-          src/
-          config/
-          test_system.py
+          dist/
         retention-days: 30

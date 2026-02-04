@@ -224,8 +224,12 @@ class Timer:
         print(f"{self.name} took {elapsed:.3f} seconds")
     
     @property
-    def elapsed(self) -> float:
-        """Get elapsed time"""
-        if self.start_time and self.end_time:
+    def elapsed(self) -> Optional[float]:
+        """Get elapsed time, returns None if timer hasn't finished"""
+        if self.start_time is None:
+            return None
+        if self.end_time is not None:
             return self.end_time - self.start_time
-        return 0.0
+        # Return current elapsed time if timer is still running
+        import time
+        return time.time() - self.start_time

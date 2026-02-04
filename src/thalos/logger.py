@@ -25,9 +25,15 @@ class ColoredFormatter(logging.Formatter):
     
     def format(self, record):
         if sys.stdout.isatty():  # Only add colors if output is a terminal
-            levelname = record.levelname
-            if levelname in self.COLORS:
-                record.levelname = f"{self.COLORS[levelname]}{levelname}{self.COLORS['RESET']}"
+            # Save original levelname to avoid polluting other handlers
+            original_levelname = record.levelname
+            if original_levelname in self.COLORS:
+                record.levelname = f"{self.COLORS[original_levelname]}{original_levelname}{self.COLORS['RESET']}"
+            try:
+                return super().format(record)
+            finally:
+                # Restore original levelname for other handlers
+                record.levelname = original_levelname
         return super().format(record)
 
 

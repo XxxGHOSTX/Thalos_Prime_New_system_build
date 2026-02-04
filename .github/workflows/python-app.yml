@@ -34,10 +34,9 @@ jobs:
     
     - name: Lint with basic checks
       run: |
-        # Stop on syntax errors
-        python -m py_compile $(find . -name "*.py" -not -path "./.git/*" -not -path "./__pycache__/*" 2>/dev/null || echo "")
+        # Use git ls-files for portability
+        python -m py_compile $(git ls-files '*.py' || python -c "import os; print(' '.join([os.path.join(r,f) for r,d,files in os.walk('.') for f in files if f.endswith('.py') and '.git' not in r]))")
       shell: bash
-      continue-on-error: true
     
     - name: Test with pytest
       run: |

@@ -1,7 +1,6 @@
 """
 Semantic Behavioral Integration (SBI) reasoning module for THALOS Prime
 """
-import re
 from typing import Dict, Any
 
 
