@@ -5,7 +5,7 @@ Common helper functions used across the application
 import sys
 import json
 import hashlib
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 from pathlib import Path
 
 
