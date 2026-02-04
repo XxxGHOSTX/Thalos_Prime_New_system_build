@@ -2,7 +2,6 @@
 Utility Functions for THALOS Prime
 Common helper functions used across the application
 """
-import os
 import sys
 import json
 import hashlib
