@@ -1,0 +1,14 @@
+# THALOS Prime System Requirements
+
+# Core dependencies
+pyyaml>=6.0
+
+# Optional dependencies for enhanced functionality
+# cryptography>=41.0.0  # For advanced crypto (fallback to builtin if not available)
+# numpy>=1.24.0  # Optional for accelerated tensor operations
+
+# Development dependencies (install with: pip install -r requirements.txt -r requirements-dev.txt)
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
+# flake8>=6.1.0
+# pylint>=3.0.0

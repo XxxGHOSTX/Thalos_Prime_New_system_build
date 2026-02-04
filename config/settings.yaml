@@ -1,0 +1,76 @@
+# THALOS Prime Configuration
+application:
+  name: "THALOS Prime"
+  version: "3.2.0"
+  environment: "development"
+  debug: true
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/thalos_prime.log"
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+  console: true
+
+# Database Configuration
+database:
+  type: "sqlite"
+  path: "data/thalos_prime.db"
+  pool_size: 5
+  echo: false
+
+# Matrix Codex Engine
+matrix_codex:
+  enabled: true
+  dimensions: [512, 512, 512]
+  complexity_level: 3
+  render_quality: "high"
+  update_frequency: 60  # Hz
+
+# 3D Background Engine
+background_engine:
+  enabled: true
+  resolution: [1920, 1080]
+  fps_target: 60
+  particle_count: 10000
+  shader_quality: "ultra"
+
+# GUI Configuration
+gui:
+  theme: "dark"
+  window_size: [1600, 900]
+  fullscreen: false
+  vsync: true
+  font_size: 12
+  font_family: "monospace"
+
+# API Configuration
+api:
+  host: "localhost"
+  port: 8080
+  cors_enabled: true
+  rate_limit: 100  # requests per minute
+  auth_enabled: false
+
+# Neural Network Configuration
+neural:
+  model_path: "data/models"
+  device: "cpu"
+  batch_size: 32
+  max_sequence_length: 512
+
+# Performance & Monitoring
+performance:
+  enable_profiling: false
+  metrics_interval: 60  # seconds
+  health_check_interval: 30  # seconds
+  memory_limit_mb: 2048
+
+# Storage Configuration  
+storage:
+  cache_dir: "data/cache"
+  max_cache_size_mb: 1024
+  auto_cleanup: true
+  compression_enabled: true

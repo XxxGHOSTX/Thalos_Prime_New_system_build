@@ -1,0 +1,17 @@
+# Production Environment Configuration
+application:
+  debug: false
+  hot_reload: false
+
+logging:
+  level: "WARNING"
+  console: false
+
+api:
+  cors_enabled: false
+  auth_enabled: true
+  rate_limit: 50
+
+performance:
+  enable_profiling: false
+  memory_limit_mb: 4096

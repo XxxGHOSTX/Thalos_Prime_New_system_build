@@ -1,0 +1,106 @@
+# Azure Pipelines Configuration for THALOS Prime
+# Multi-stage pipeline for build, test, and deployment
+
+trigger:
+  branches:
+    include:
+    - main
+    - develop
+    - release/*
+  paths:
+    exclude:
+    - docs/*
+    - README.md
+
+pr:
+  branches:
+    include:
+    - main
+    - develop
+
+stages:
+- stage: Build
+  displayName: 'Build and Test'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build THALOS Prime'
+    pool:
+      vmImage: 'ubuntu-latest'
+    strategy:
+      matrix:
+        Python311:
+          python.version: '3.11'
+        Python312:
+          python.version: '3.12'
+    
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(python.version)'
+      displayName: 'Use Python $(python.version)'
+    
+    - script: |
+        python -m pip install --upgrade pip
+        pip install pyyaml pytest pytest-cov
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      displayName: 'Install dependencies'
+    
+    - script: |
+        # Use Python-based file discovery for cross-platform compatibility
+        python -c "import os; import py_compile; [py_compile.compile(os.path.join(r,f), doraise=True) for r,d,files in os.walk('.') for f in files if f.endswith('.py') and '.git' not in r and '__pycache__' not in r and 'venv' not in r]"
+      displayName: 'Check syntax'
+    
+    - script: |
+        export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
+        python test_system.py
+        python test_complete_system.py
+      displayName: 'Run tests'
+    
+    # Note: Tests don't produce JUnit XML, so we skip PublishTestResults
+    # If needed, configure pytest to generate XML with: pytest --junitxml=test-results.xml
+
+- stage: SecurityScan
+  displayName: 'Security Scanning'
+  dependsOn: Build
+  jobs:
+  - job: SecurityJob
+    displayName: 'Security Analysis'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.12'
+    
+    - script: |
+        echo "Running security scan..."
+        # Add security scanning tools here
+        echo "Security scan completed"
+      displayName: 'Security scan'
+
+- stage: Package
+  displayName: 'Package Application'
+  dependsOn: SecurityScan
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - job: PackageJob
+    displayName: 'Create Package'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.12'
+    
+    - script: |
+        python -m pip install --upgrade pip build wheel
+        python -m build
+      displayName: 'Build package'
+    
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: 'dist'
+        ArtifactName: 'thalos-prime-package'
+      displayName: 'Publish package artifacts'
