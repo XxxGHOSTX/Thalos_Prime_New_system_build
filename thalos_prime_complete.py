@@ -25,8 +25,6 @@ COMPONENTS:
 
 3. Encoding Module:
    - Character-level tokenization
-   - Byte-Pair Encoding (BPE)
-   - SentencePiece-style tokenization
    - Word-level tokenization
 
 4. Model Module:
