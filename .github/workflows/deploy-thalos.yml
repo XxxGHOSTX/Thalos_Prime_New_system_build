@@ -21,31 +21,88 @@ jobs:
       with:
         python-version: '3.11'
     
-    - name: Verify single file exists
+    - name: Verify application structure
       run: |
-        echo "Checking for thalos_prime_complete.py..."
-        if [ -f thalos_prime_complete.py ]; then
-          echo "✓ thalos_prime_complete.py found"
-          ls -lh thalos_prime_complete.py
+        echo "Checking THALOS Prime application structure..."
+        echo ""
+        echo "Core modules:"
+        if [ -d thalos_prime ]; then
+          echo "✓ thalos_prime/ module found"
         else
-          echo "✗ thalos_prime_complete.py not found"
+          echo "✗ thalos_prime/ module missing"
           exit 1
         fi
+        
+        if [ -d thalos_sbi_standalone ]; then
+          echo "✓ thalos_sbi_standalone/ module found"
+        else
+          echo "✗ thalos_sbi_standalone/ module missing"
+          exit 1
+        fi
+        
+        echo ""
+        echo "Entry points:"
+        if [ -f main.py ]; then
+          echo "✓ main.py found"
+        else
+          echo "✗ main.py missing"
+          exit 1
+        fi
+        
+        if [ -f app.py ]; then
+          echo "✓ app.py found"
+        else
+          echo "✗ app.py missing"
+          exit 1
+        fi
+        
+        echo ""
+        echo "Configuration:"
+        if [ -f requirements.txt ]; then
+          echo "✓ requirements.txt found"
+        else
+          echo "✗ requirements.txt missing"
+          exit 1
+        fi
+        
+        echo ""
+        echo "All required files and directories present!"
     
-    - name: Test THALOS Prime System
+    - name: Run system tests
       run: |
-        echo "Testing THALOS Prime system..."
-        python thalos_prime_complete.py --version
+        echo "Running THALOS Prime system tests..."
+        python test_system.py
+    
+    - name: Test main entry point
+      run: |
+        echo "Testing main.py entry point..."
+        python main.py --version
         echo ""
         echo "Testing query processing..."
-        python thalos_prime_complete.py --query "Test deployment"
+        python main.py --query "Test deployment"
+    
+    - name: Verify launcher scripts
+      run: |
+        echo "Verifying Windows launcher scripts..."
+        if [ -f LAUNCH.bat ]; then
+          echo "✓ LAUNCH.bat found"
+        fi
+        if [ -f LAUNCH_GUI.bat ]; then
+          echo "✓ LAUNCH_GUI.bat found"
+        fi
+        if [ -f LAUNCH_ADVANCED_GUI.bat ]; then
+          echo "✓ LAUNCH_ADVANCED_GUI.bat found"
+        fi
     
     - name: Deploy - System Ready
       run: |
         echo "=========================================="
         echo "THALOS Prime Deployment Complete!"
         echo "=========================================="
-        echo "Single file: thalos_prime_complete.py"
+        echo "Application Structure: Organized for Windows deployment"
+        echo "Core Modules: thalos_prime/, thalos_sbi_standalone/"
+        echo "Entry Points: main.py, app.py, GUIs"
+        echo "Launchers: LAUNCH.bat, LAUNCH_GUI.bat, LAUNCH_ADVANCED_GUI.bat"
         echo "Status: READY FOR PRODUCTION"
         echo "Auto-deployment: SUCCESS"
         echo "=========================================="
