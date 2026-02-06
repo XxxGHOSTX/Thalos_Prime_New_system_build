@@ -39,7 +39,20 @@ env/
 # Databases
 *.db
 *.sqlite
-data/
+data/*
+!data/README.md
+
+# Logs
+logs/*
+!logs/README.md
+
+# Cache
+cache/*
+!cache/README.md
+
+# Output
+output/*
+!output/README.md
 
 # OS
 .DS_Store
