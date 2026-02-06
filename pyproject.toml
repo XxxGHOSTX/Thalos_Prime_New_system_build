@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thalos-prime"
+version = "3.1.0"
+description = "THALOS Prime - Intelligent AI System with Semantic Behavioral Integration"
+readme = "README.md"
+license = {text = "Proprietary"}
+requires-python = ">=3.11"
+authors = [
+    {name = "THALOS Prime Team"}
+]
+keywords = ["ai", "nlp", "machine-learning", "transformer", "neural-network"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+web = [
+    "flask>=3.0.0",
+]
+crypto = [
+    "cryptography>=41.0.0",
+]
+
+[project.scripts]
+thalos = "main:main"
+thalos-gui = "thalos_prime_gui:main"
+
+[project.urls]
+Homepage = "https://github.com/XxxGHOSTX/Thalos_Prime_New_system_build"
+Repository = "https://github.com/XxxGHOSTX/Thalos_Prime_New_system_build"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["thalos_prime*", "thalos_sbi_standalone*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

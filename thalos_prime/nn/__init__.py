@@ -5,6 +5,11 @@ Pure Python implementation of neural network components
 """
 
 # Layer components
+"""
+THALOS Prime - Neural Network Module
+Neural network layers, transformers, and model utilities.
+"""
+
 from .layer import (
     Layer,
     Linear,
@@ -19,6 +24,10 @@ from .layer import (
 )
 
 # Transformer components
+    LayerNormLayer,
+    Sequential
+)
+
 from .transformer import (
     MultiHeadAttention,
     FeedForwardNetwork,
@@ -29,6 +38,9 @@ from .transformer import (
 )
 
 # Models and training utilities
+    CrossAttentionBlock
+)
+
 from .model import (
     THALOSPrimeModel,
     ModelOptimizer,
@@ -42,6 +54,13 @@ __all__ = [
     'Layer',
     
     # Core layers
+    LearningRateScheduler,
+    KVCache
+)
+
+__all__ = [
+    # Layers
+    'Layer',
     'Linear',
     'Embedding',
     'PositionalEncoding',
@@ -52,6 +71,8 @@ __all__ = [
     'BatchNorm1d',
     'Sequential',
     
+    'LayerNormLayer',
+    'Sequential',
     # Transformer components
     'MultiHeadAttention',
     'FeedForwardNetwork',
@@ -72,3 +93,10 @@ __all__ = [
 
 __version__ = '1.0.0'
 __author__ = 'THALOS Prime Team'
+    # Model and training
+    'THALOSPrimeModel',
+    'ModelOptimizer',
+    'LossFunction',
+    'LearningRateScheduler',
+    'KVCache',
+]
