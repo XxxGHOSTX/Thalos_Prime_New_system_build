@@ -1,11 +1,13 @@
+#!/usr/bin/env python3
 """
-THALOS Prime - Math Module
-Mathematical foundations for the THALOS Prime system.
+THALOS Prime Math Module
+Complete mathematical foundations for THALOS Prime system
 """
 
+# Core tensor operations
 from .tensor import (
-    Shape,
     Tensor,
+    Shape,
     randn,
     zeros,
     ones,
@@ -35,26 +37,14 @@ __all__ = [
     'zeros',
     'ones',
     'eye',
-    'arange',
-    'linspace',
-    'cat',
-    'stack',
-    # Linear algebra
+    'uniform',
+    
+    # Classes
     'LinearAlgebra',
-    # Activations and normalizations
     'Activations',
-    'LayerNorm',
-    'BatchNorm',
-    'RMSNorm',
-    # Distributions
     'Distributions',
-    'Initializers',
-    'Dropout',
-    'ProbabilityFunctions',
-    # Attention
     'AttentionMechanisms',
-    'MultiHeadAttention',
-    'CrossAttention',
-    'LinearAttention',
-    'AttentionMetrics',
 ]
+
+__version__ = '1.0.0'
+__author__ = 'THALOS Prime Team'
