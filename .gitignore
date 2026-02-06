@@ -39,6 +39,7 @@ env/
 # Databases
 *.db
 *.sqlite
+data/
 
 # OS
 .DS_Store
