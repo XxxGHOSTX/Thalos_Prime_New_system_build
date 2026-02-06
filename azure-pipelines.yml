@@ -1,0 +1,27 @@
+trigger:
+  - main
+  - master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+strategy:
+  matrix:
+    Python311:
+      python.version: '3.11'
+    Python312:
+      python.version: '3.12'
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '$(python.version)'
+  displayName: 'Use Python $(python.version)'
+
+- script: |
+    python -m pip install --upgrade pip
+  displayName: 'Install dependencies'
+
+- script: |
+    python test_system.py
+  displayName: 'Run tests'
