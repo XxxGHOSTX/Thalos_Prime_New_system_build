@@ -954,6 +954,44 @@ class SemanticBehavioralIntegration:
             'sample_size': len(sentiment_history)
         }
     
+    def process(self, text: str, context: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Process input text and generate response (alias for process_input).
+        
+        This method provides compatibility with the core engine.
+        
+        Args:
+            text: Input text to process
+            context: Optional conversation context (for compatibility)
+            
+        Returns:
+            Dictionary with 'response', 'confidence', and other metadata
+        """
+        result = self.process_input(text)
+        
+        # Generate response text based on analysis
+        intent = result['analysis']['intent']
+        category = result['analysis']['category']
+        
+        # Build response
+        if intent == 'greeting':
+            response = "Hello! I'm THALOS Prime. How can I assist you today?"
+        elif intent == 'question':
+            response = f"I understand you're asking about {category}. Based on my semantic analysis, I can provide detailed information on this topic."
+        elif intent == 'farewell':
+            response = "Goodbye! Feel free to return if you need assistance."
+        else:
+            response = f"I've analyzed your {intent} regarding {category}. Let me provide you with a thoughtful response."
+        
+        # Return in expected format
+        return {
+            'response': response,
+            'confidence': result['confidence'],
+            'intent': intent,
+            'sentiment': result['analysis']['sentiment'],
+            'entities': result['analysis']['entities']
+        }
+    
     def __repr__(self) -> str:
         """String representation of the SBI system."""
         context = self.context_manager.get_context()
