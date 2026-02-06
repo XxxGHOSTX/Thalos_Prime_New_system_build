@@ -19,6 +19,7 @@ import hashlib
 import hmac
 import secrets
 import base64
+import warnings
 from typing import Union, Optional, Tuple, Dict, Any
 import json
 import struct
@@ -509,11 +510,10 @@ class AES256:
         
         This implementation should ONLY be used for testing or non-security purposes.
         """
-        import warnings
         warnings.warn(
             "Using pure Python AES fallback which is NOT cryptographically secure. "
             "Install 'cryptography' library for production use.",
-            SecurityWarning,
+            UserWarning,
             stacklevel=3
         )
         
@@ -541,11 +541,10 @@ class AES256:
         WARNING: This is NOT cryptographically equivalent to actual AES-CBC.
         See _aes_cbc_encrypt_pure() for security warnings.
         """
-        import warnings
         warnings.warn(
             "Using pure Python AES fallback which is NOT cryptographically secure. "
             "Install 'cryptography' library for production use.",
-            SecurityWarning,
+            UserWarning,
             stacklevel=3
         )
         
