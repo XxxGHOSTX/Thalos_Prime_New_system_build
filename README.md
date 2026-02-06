@@ -1,81 +1,72 @@
-# THALOS Prime
+# THALOS Prime - Single File Deployment
 
-**Intelligent AI System with Semantic Behavioral Integration**
-
-Version: 3.1.0
+**Version 3.1.0** - Complete Consolidated System
 
 ## Overview
 
-THALOS Prime is a comprehensive AI system built from the ground up with custom implementations of:
-
-- Tensor operations and linear algebra
-- Neural network layers and transformer architectures
-- Text tokenization (BPE, character-level, word-level)
-- Cryptographic functions (AES-256, SHA-256)
-- Operating system primitives (memory management, virtual filesystem)
-- Semantic Behavioral Integration (SBI) reasoning
+This repository contains the complete THALOS Prime AI system in a single, self-contained Python file: `thalos_prime_complete.py`
 
 ## Features
 
-- **Custom Math Engine**: Full tensor operations without external dependencies
-- **Transformer Architecture**: Multi-head attention, feed-forward networks
-- **Tokenization**: Multiple tokenization strategies
-- **Security**: Built-in encryption and hashing
-- **Reasoning**: Semantic analysis with behavioral modeling
+- ✅ **Zero Dependencies** - Uses only Python standard library
+- ✅ **Single File** - Everything in one file for easy deployment
+- ✅ **Auto-Deploy** - GitHub Actions automatically deploys on push to master
+- ✅ **Complete System** - Full transformer-based AI with 260K+ parameters
+- ✅ **Multiple Modes** - Interactive, query, and server modes
 
 ## Quick Start
 
 ```bash
-# Run interactive session
-python main.py --interactive
+# Show version information
+python thalos_prime_complete.py --version
+
+# Interactive mode
+python thalos_prime_complete.py --interactive
 
 # Process a single query
-python main.py --query "What is machine learning?"
+python thalos_prime_complete.py --query "Hello THALOS"
 
-# Run system tests
-python test_system.py
-
-# Run GUI
-python thalos_prime_gui.py
-```
-
-## Project Structure
-
-```
-thalos_prime/
-├── math/          # Tensor operations, linear algebra, activations
-├── nn/            # Neural network layers, transformers
-├── encoding/      # Text tokenization
-├── crypto/        # Encryption and hashing
-├── kernel/        # Memory management, filesystem
-├── reasoning/     # SBI reasoning engine
-├── core/          # Main orchestrator
-├── config/        # Configuration management
-├── storage/       # Data persistence
-├── inference/     # Text generation
-├── utils/         # Utilities
-├── database/      # Database operations
-└── wetware/       # Bio-inspired computing
-
-thalos_sbi_standalone/
-├── core_engine.py
-├── code_generator.py
-├── nlp_module.py
-└── ...
+# Run as web server
+python thalos_prime_complete.py --server
 ```
 
 ## Requirements
 
-- Python 3.11+
-- No external dependencies for core functionality
+- Python 3.6 or higher
+- No external dependencies required!
+
+## Components Included
+
+- **Tensor Operations** - N-dimensional arrays with broadcasting
+- **Neural Networks** - Transformer architecture with multi-head attention
+- **Tokenization** - Character and word-level tokenizers
+- **Text Generation** - Temperature, top-k, top-p sampling
+- **Web Application** - REST API for query processing
+
+## Auto-Deployment
+
+Every push to the master branch automatically:
+1. ✅ Verifies the single file exists
+2. ✅ Tests the system functionality
+3. ✅ Confirms deployment readiness
+
+See `.github/workflows/deploy-thalos.yml` for deployment configuration.
+
+## Architecture
+
+The system implements a complete transformer-based language model with:
+- Multi-head self-attention
+- Feed-forward networks
+- Layer normalization
+- Positional encoding
+- Text generation with sampling
+
+Total: ~260,840 trainable parameters
 
 ## License
 
 Proprietary - THALOS Prime Systems
 
-## Documentation
+---
 
-See the following documentation files:
-- `ARCHITECTURE.md` - Technical architecture
-- `QUICKSTART.md` - Quick start guide
-- `FILE_INDEX.md` - Complete file listing
+**THALOS Prime** - *Intelligent AI System with Semantic Behavioral Integration*
