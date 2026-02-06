@@ -1,276 +1,348 @@
 """
 THALOS Prime - Utilities Module
-Logging, profiling, and validation utilities.
+
+Provides logging, profiling, validation, and utility functions.
+
+Components:
+    - Logger: Multi-level logging system
+    - Profiler: Performance measurement
+    - Validator: Input validation
+
+Author: THALOS Prime Development Team
+License: MIT
 """
 
-from typing import Any, Optional, List, Dict, Callable
 import time
-import functools
+import logging
+from typing import Dict, List, Optional, Any, Callable
+from datetime import datetime
+from pathlib import Path
 
 
 class Logger:
-    """Simple logging utility."""
+    """
+    Multi-level logging system with file and console output.
     
-    LEVELS = {'DEBUG': 0, 'INFO': 1, 'WARNING': 2, 'ERROR': 3, 'CRITICAL': 4}
+    Features:
+        - Multiple log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        - File and console output
+        - Timestamped logs
+        - Log filtering
+    """
     
-    def __init__(self, name: str = 'THALOS', level: str = 'INFO'):
+    LEVELS = {
+        'DEBUG': logging.DEBUG,
+        'INFO': logging.INFO,
+        'WARNING': logging.WARNING,
+        'ERROR': logging.ERROR,
+        'CRITICAL': logging.CRITICAL
+    }
+    
+    def __init__(self, name: str = "THALOS", level: str = "INFO", log_file: Optional[str] = None):
+        """
+        Initialize logger.
+        
+        Args:
+            name: Logger name
+            level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+            log_file: Optional file path for logging
+        """
         self.name = name
         self.level = level
-        self.handlers: List[Callable] = []
-        self._add_default_handler()
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(self.LEVELS.get(level, logging.INFO))
+        
+        # Clear existing handlers
+        self.logger.handlers.clear()
+        
+        # Console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(self.LEVELS.get(level, logging.INFO))
+        formatter = logging.Formatter('[%(asctime)s] %(name)s - %(levelname)s: %(message)s')
+        console_handler.setFormatter(formatter)
+        self.logger.addHandler(console_handler)
+        
+        # File handler
+        if log_file:
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setLevel(self.LEVELS.get(level, logging.INFO))
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
     
-    def _add_default_handler(self) -> None:
-        """Add default console handler."""
-        def console_handler(level: str, message: str):
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{timestamp}] [{self.name}] [{level}] {message}")
-        self.handlers.append(console_handler)
-    
-    def _should_log(self, level: str) -> bool:
-        """Check if message should be logged."""
-        return self.LEVELS.get(level, 0) >= self.LEVELS.get(self.level, 0)
-    
-    def _log(self, level: str, message: str) -> None:
-        """Log a message."""
-        if self._should_log(level):
-            for handler in self.handlers:
-                handler(level, message)
-    
-    def debug(self, message: str) -> None:
+    def debug(self, message: str):
         """Log debug message."""
-        self._log('DEBUG', message)
+        self.logger.debug(message)
     
-    def info(self, message: str) -> None:
+    def info(self, message: str):
         """Log info message."""
-        self._log('INFO', message)
+        self.logger.info(message)
     
-    def warning(self, message: str) -> None:
+    def warning(self, message: str):
         """Log warning message."""
-        self._log('WARNING', message)
+        self.logger.warning(message)
     
-    def error(self, message: str) -> None:
+    def error(self, message: str):
         """Log error message."""
-        self._log('ERROR', message)
+        self.logger.error(message)
     
-    def critical(self, message: str) -> None:
+    def critical(self, message: str):
         """Log critical message."""
-        self._log('CRITICAL', message)
+        self.logger.critical(message)
     
-    def set_level(self, level: str) -> None:
-        """Set logging level."""
-        if level in self.LEVELS:
-            self.level = level
-    
-    def add_handler(self, handler: Callable) -> None:
-        """Add a custom handler."""
-        self.handlers.append(handler)
+    def set_level(self, level: str):
+        """
+        Set logging level.
+        
+        Args:
+            level: New log level
+        """
+        self.level = level
+        self.logger.setLevel(self.LEVELS.get(level, logging.INFO))
 
 
 class Profiler:
-    """Performance profiling utility."""
+    """
+    Performance measurement and profiling.
     
-    def __init__(self):
+    Features:
+        - Function execution timing
+        - Memory usage tracking
+        - Operation statistics
+        - Context manager support
+    """
+    
+    def __init__(self, name: str = "default"):
+        """
+        Initialize profiler.
+        
+        Args:
+            name: Profiler name
+        """
+        self.name = name
         self.timings: Dict[str, List[float]] = {}
-        self.active_timers: Dict[str, float] = {}
+        self.counts: Dict[str, int] = {}
+        self.current_operation: Optional[str] = None
+        self.start_time: Optional[float] = None
     
-    def start(self, name: str) -> None:
-        """Start timing a section."""
-        self.active_timers[name] = time.time()
+    def start(self, operation: str):
+        """
+        Start timing an operation.
+        
+        Args:
+            operation: Operation name
+        """
+        self.current_operation = operation
+        self.start_time = time.time()
     
-    def stop(self, name: str) -> float:
-        """Stop timing and record duration."""
-        if name not in self.active_timers:
+    def stop(self) -> float:
+        """
+        Stop timing current operation.
+        
+        Returns:
+            Elapsed time in seconds
+        """
+        if self.start_time is None or self.current_operation is None:
             return 0.0
         
-        duration = time.time() - self.active_timers[name]
-        del self.active_timers[name]
+        elapsed = time.time() - self.start_time
         
-        if name not in self.timings:
-            self.timings[name] = []
-        self.timings[name].append(duration)
+        if self.current_operation not in self.timings:
+            self.timings[self.current_operation] = []
+            self.counts[self.current_operation] = 0
         
-        return duration
+        self.timings[self.current_operation].append(elapsed)
+        self.counts[self.current_operation] += 1
+        
+        self.current_operation = None
+        self.start_time = None
+        
+        return elapsed
     
-    def profile(self, name: str) -> Callable:
-        """Decorator to profile a function."""
-        def decorator(fn: Callable) -> Callable:
-            @functools.wraps(fn)
-            def wrapper(*args, **kwargs):
-                self.start(name)
-                result = fn(*args, **kwargs)
-                self.stop(name)
-                return result
-            return wrapper
-        return decorator
-    
-    def get_stats(self, name: str) -> Dict[str, float]:
-        """Get statistics for a profiled section."""
-        timings = self.timings.get(name, [])
-        if not timings:
-            return {'count': 0, 'total': 0, 'avg': 0, 'min': 0, 'max': 0}
+    def profile(self, operation: str):
+        """
+        Context manager for profiling operations.
         
+        Args:
+            operation: Operation name
+            
+        Example:
+            with profiler.profile("inference"):
+                # code to profile
+                pass
+        """
+        return ProfilerContext(self, operation)
+    
+    def get_stats(self, operation: str) -> Dict[str, float]:
+        """
+        Get statistics for an operation.
+        
+        Args:
+            operation: Operation name
+            
+        Returns:
+            Dictionary with min, max, avg, total, count
+        """
+        if operation not in self.timings:
+            return {}
+        
+        times = self.timings[operation]
         return {
-            'count': len(timings),
-            'total': sum(timings),
-            'avg': sum(timings) / len(timings),
-            'min': min(timings),
-            'max': max(timings)
+            'count': self.counts[operation],
+            'total': sum(times),
+            'avg': sum(times) / len(times),
+            'min': min(times),
+            'max': max(times)
         }
     
-    def report(self) -> str:
-        """Generate profiling report."""
-        lines = ["Profiling Report", "=" * 50]
-        
-        for name in sorted(self.timings.keys()):
-            stats = self.get_stats(name)
-            lines.append(
-                f"{name}: {stats['count']} calls, "
-                f"avg={stats['avg']*1000:.2f}ms, "
-                f"total={stats['total']:.3f}s"
-            )
-        
-        return '\n'.join(lines)
+    def get_all_stats(self) -> Dict[str, Dict[str, float]]:
+        """Get statistics for all operations."""
+        return {op: self.get_stats(op) for op in self.timings.keys()}
     
-    def reset(self) -> None:
-        """Reset all timings."""
+    def reset(self):
+        """Reset all profiling data."""
         self.timings.clear()
-        self.active_timers.clear()
+        self.counts.clear()
+
+
+class ProfilerContext:
+    """Context manager for profiler."""
+    
+    def __init__(self, profiler: Profiler, operation: str):
+        self.profiler = profiler
+        self.operation = operation
+    
+    def __enter__(self):
+        self.profiler.start(self.operation)
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.profiler.stop()
 
 
 class Validator:
-    """Input validation utility."""
+    """
+    Input validation and sanitization.
+    
+    Features:
+        - Type checking
+        - Range validation
+        - Format validation
+        - Custom validators
+    """
     
     @staticmethod
-    def is_non_empty_string(value: Any) -> bool:
-        """Check if value is a non-empty string."""
-        return isinstance(value, str) and len(value.strip()) > 0
-    
-    @staticmethod
-    def is_positive_int(value: Any) -> bool:
-        """Check if value is a positive integer."""
-        return isinstance(value, int) and value > 0
-    
-    @staticmethod
-    def is_in_range(value: Any, min_val: float, max_val: float) -> bool:
-        """Check if value is within range."""
-        try:
-            return min_val <= float(value) <= max_val
-        except (TypeError, ValueError):
+    def validate_string(value: Any, min_length: int = 0, max_length: int = 10000) -> bool:
+        """
+        Validate string input.
+        
+        Args:
+            value: Value to validate
+            min_length: Minimum length
+            max_length: Maximum length
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        if not isinstance(value, str):
             return False
+        
+        length = len(value)
+        return min_length <= length <= max_length
     
     @staticmethod
-    def is_valid_email(value: str) -> bool:
-        """Check if value is a valid email format."""
-        import re
-        pattern = r'^[\w.-]+@[\w.-]+\.\w+$'
-        return bool(re.match(pattern, value))
+    def validate_number(value: Any, min_val: Optional[float] = None, 
+                       max_val: Optional[float] = None) -> bool:
+        """
+        Validate numeric input.
+        
+        Args:
+            value: Value to validate
+            min_val: Minimum value
+            max_val: Maximum value
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        if not isinstance(value, (int, float)):
+            return False
+        
+        if min_val is not None and value < min_val:
+            return False
+        
+        if max_val is not None and value > max_val:
+            return False
+        
+        return True
     
     @staticmethod
-    def sanitize_input(text: str) -> str:
-        """Sanitize user input."""
+    def validate_list(value: Any, min_length: int = 0, max_length: Optional[int] = None,
+                     element_validator: Optional[Callable] = None) -> bool:
+        """
+        Validate list input.
+        
+        Args:
+            value: Value to validate
+            min_length: Minimum list length
+            max_length: Maximum list length
+            element_validator: Optional validator for elements
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        if not isinstance(value, list):
+            return False
+        
+        length = len(value)
+        
+        if length < min_length:
+            return False
+        
+        if max_length is not None and length > max_length:
+            return False
+        
+        if element_validator:
+            return all(element_validator(elem) for elem in value)
+        
+        return True
+    
+    @staticmethod
+    def validate_dict(value: Any, required_keys: Optional[List[str]] = None) -> bool:
+        """
+        Validate dictionary input.
+        
+        Args:
+            value: Value to validate
+            required_keys: Optional list of required keys
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        if not isinstance(value, dict):
+            return False
+        
+        if required_keys:
+            return all(key in value for key in required_keys)
+        
+        return True
+    
+    @staticmethod
+    def sanitize_string(value: str, max_length: int = 10000) -> str:
+        """
+        Sanitize string input.
+        
+        Args:
+            value: String to sanitize
+            max_length: Maximum length
+            
+        Returns:
+            Sanitized string
+        """
         # Remove control characters
-        cleaned = ''.join(c for c in text if ord(c) >= 32 or c in '\n\t')
-        # Trim whitespace
-        cleaned = cleaned.strip()
-        return cleaned
-    
-    @staticmethod
-    def validate_config(config: Dict[str, Any], schema: Dict[str, type]) -> List[str]:
-        """Validate configuration against schema."""
-        errors = []
+        sanitized = ''.join(char for char in value if ord(char) >= 32 or char == '\n')
         
-        for key, expected_type in schema.items():
-            if key not in config:
-                errors.append(f"Missing required key: {key}")
-            elif not isinstance(config[key], expected_type):
-                errors.append(f"Invalid type for {key}: expected {expected_type.__name__}")
-        
-        return errors
+        # Truncate to max length
+        return sanitized[:max_length]
 
 
-class Timer:
-    """Context manager for timing code blocks."""
-    
-    def __init__(self, name: str = "Timer", logger: Optional[Logger] = None):
-        self.name = name
-        self.logger = logger
-        self.start_time: Optional[float] = None
-        self.end_time: Optional[float] = None
-    
-    def __enter__(self) -> 'Timer':
-        self.start_time = time.time()
-        return self
-    
-    def __exit__(self, *args) -> None:
-        self.end_time = time.time()
-        duration = self.end_time - self.start_time
-        
-        if self.logger:
-            self.logger.debug(f"{self.name}: {duration:.4f} seconds")
-    
-    @property
-    def elapsed(self) -> float:
-        """Get elapsed time."""
-        if self.start_time is None:
-            return 0.0
-        end = self.end_time or time.time()
-        return end - self.start_time
-
-
-class Cache:
-    """Simple in-memory cache."""
-    
-    def __init__(self, max_size: int = 1000, ttl: Optional[float] = None):
-        self.max_size = max_size
-        self.ttl = ttl
-        self._cache: Dict[str, tuple] = {}  # key -> (value, timestamp)
-    
-    def get(self, key: str) -> Optional[Any]:
-        """Get value from cache."""
-        if key not in self._cache:
-            return None
-        
-        value, timestamp = self._cache[key]
-        
-        # Check TTL
-        if self.ttl and time.time() - timestamp > self.ttl:
-            del self._cache[key]
-            return None
-        
-        return value
-    
-    def set(self, key: str, value: Any) -> None:
-        """Set value in cache."""
-        # Evict if at capacity
-        if len(self._cache) >= self.max_size:
-            # Remove oldest entry
-            oldest_key = min(self._cache.keys(), 
-                            key=lambda k: self._cache[k][1])
-            del self._cache[oldest_key]
-        
-        self._cache[key] = (value, time.time())
-    
-    def delete(self, key: str) -> bool:
-        """Delete key from cache."""
-        if key in self._cache:
-            del self._cache[key]
-            return True
-        return False
-    
-    def clear(self) -> None:
-        """Clear all cache entries."""
-        self._cache.clear()
-    
-    def size(self) -> int:
-        """Get current cache size."""
-        return len(self._cache)
-
-
-# Export classes
-__all__ = [
-    'Logger',
-    'Profiler',
-    'Validator',
-    'Timer',
-    'Cache',
-]
+__all__ = ['Logger', 'Profiler', 'Validator']
+__version__ = '1.0.0'

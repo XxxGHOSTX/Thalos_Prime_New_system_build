@@ -1,73 +1,50 @@
+#!/usr/bin/env python3
 """
-THALOS Prime - Math Module
-Mathematical foundations for the THALOS Prime system.
+THALOS Prime Math Module
+Complete mathematical foundations for THALOS Prime system
 """
 
+# Core tensor operations
 from .tensor import (
-    Shape,
     Tensor,
+    Shape,
     randn,
     zeros,
     ones,
     eye,
-    arange,
-    linspace,
-    cat,
-    stack
+    uniform
 )
 
+# Linear algebra
 from .linear_algebra import LinearAlgebra
 
-from .activations import (
-    Activations,
-    LayerNorm,
-    BatchNorm,
-    RMSNorm
-)
+# Activation functions
+from .activations import Activations
 
-from .distributions import (
-    Distributions,
-    Initializers,
-    Dropout,
-    ProbabilityFunctions
-)
+# Distributions and initialization
+from .distributions import Distributions
 
-from .attention import (
-    AttentionMechanisms,
-    MultiHeadAttention,
-    CrossAttention,
-    LinearAttention,
-    AttentionMetrics
-)
+# Attention mechanisms
+from .attention import AttentionMechanisms
 
 __all__ = [
-    # Tensor operations
-    'Shape',
+    # Tensor types
     'Tensor',
+    'Shape',
+    
+    # Tensor creation functions
     'randn',
     'zeros',
     'ones',
     'eye',
-    'arange',
-    'linspace',
-    'cat',
-    'stack',
-    # Linear algebra
+    'uniform',
+    
+    # Classes
     'LinearAlgebra',
-    # Activations and normalizations
     'Activations',
-    'LayerNorm',
-    'BatchNorm',
-    'RMSNorm',
-    # Distributions
     'Distributions',
-    'Initializers',
-    'Dropout',
-    'ProbabilityFunctions',
-    # Attention
     'AttentionMechanisms',
-    'MultiHeadAttention',
-    'CrossAttention',
-    'LinearAttention',
-    'AttentionMetrics',
 ]
+
+__version__ = '1.0.0'
+__author__ = 'THALOS Prime Team'

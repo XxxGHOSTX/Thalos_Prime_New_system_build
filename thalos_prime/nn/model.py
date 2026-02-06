@@ -1,296 +1,602 @@
+#!/usr/bin/env python3
 """
-THALOS Prime - Model Module
-Main transformer model and optimization utilities.
+THALOS Prime Neural Network Models
+Pure Python implementation of complete models and training utilities
 """
 
-from typing import Optional, List, Dict, Any, Tuple
 import math
 import random
-from .layer import Layer, Linear, Embedding, PositionalEncoding
-from .transformer import TransformerDecoder, TransformerEncoder
-from ..math.tensor import Tensor, Shape, zeros
+from typing import Optional, List, Tuple
+
+from ..math import Tensor, Shape, zeros, ones
 from ..math.activations import Activations
+from ..math.linear_algebra import LinearAlgebra
+from .layer import Layer, Linear, Embedding, PositionalEncoding, Dropout
+from .transformer import TransformerEncoder, TransformerDecoder, TransformerBlock
 
 
 class THALOSPrimeModel(Layer):
-    """Main THALOS Prime transformer model."""
+    """
+    THALOS Prime main language model
+    Transformer-based architecture for text generation
+    """
     
-    def __init__(self, 
-                 vocab_size: int = 50000,
-                 d_model: int = 512,
-                 num_heads: int = 8,
-                 num_layers: int = 6,
-                 d_ff: int = 2048,
-                 max_seq_len: int = 2048,
+    def __init__(self, vocab_size: int, d_model: int = 512, num_layers: int = 6,
+                 num_heads: int = 8, d_ff: int = 2048, max_seq_len: int = 512,
                  dropout: float = 0.1):
-        super().__init__()
+        """
+        Initialize THALOS Prime model
         
+        Args:
+            vocab_size: Size of vocabulary
+            d_model: Dimension of model embeddings
+            num_layers: Number of transformer layers
+            num_heads: Number of attention heads
+            d_ff: Dimension of feed-forward hidden layer
+            max_seq_len: Maximum sequence length
+            dropout: Dropout probability
+        """
+        super().__init__()
         self.vocab_size = vocab_size
         self.d_model = d_model
-        self.num_heads = num_heads
         self.num_layers = num_layers
-        self.d_ff = d_ff
-        self.max_seq_len = max_seq_len
+        self.num_heads = num_heads
         
         # Embedding layers
         self.token_embedding = Embedding(vocab_size, d_model)
-        self.positional_encoding = PositionalEncoding(d_model, max_seq_len)
+        self.position_encoding = PositionalEncoding(d_model, max_seq_len)
         
-        # Transformer decoder
+        # Transformer decoder stack
         self.decoder = TransformerDecoder(num_layers, d_model, num_heads, d_ff, dropout)
         
-        # Output projection
+        # Output projection to vocabulary
         self.output_projection = Linear(d_model, vocab_size)
         
-        # Collect parameters
-        self._parameters.update(self.token_embedding._parameters)
-        self._parameters.update(self.decoder._parameters)
-        self._parameters.update(self.output_projection._parameters)
+        # Dropout
+        self.dropout = Dropout(dropout)
     
     def forward(self, input_ids: Tensor) -> Tensor:
-        """Forward pass through the model."""
-        # Token embeddings
-        x = self.token_embedding(input_ids)
+        """
+        Forward pass through model
+        
+        Args:
+            input_ids: Input token IDs (batch_size, seq_len) or (seq_len,)
+            
+        Returns:
+            Logits over vocabulary (batch_size, seq_len, vocab_size) or (seq_len, vocab_size)
+        """
+        # Get embeddings
+        embeddings = self.token_embedding.forward(input_ids)
         
         # Add positional encoding
-        x = self.positional_encoding(x)
+        embeddings = self.position_encoding.forward(embeddings)
         
-        # Transformer decoder
-        x = self.decoder(x)
+        # Apply dropout
+        embeddings = self.dropout.forward(embeddings)
         
-        # Output projection to vocabulary
-        logits = self.output_projection(x)
+        # Pass through decoder
+        hidden_states = self.decoder.forward(embeddings)
+        
+        # Project to vocabulary
+        original_shape = hidden_states.shape.dims
+        if hidden_states.shape.ndim == 3:
+            batch_size, seq_len, d_model = original_shape
+            hidden_flat = hidden_states.reshape(batch_size * seq_len, d_model)
+            logits = self.output_projection.forward(hidden_flat)
+            logits = logits.reshape(batch_size, seq_len, self.vocab_size)
+        else:
+            seq_len, d_model = original_shape
+            hidden_flat = hidden_states.reshape(seq_len, d_model)
+            logits = self.output_projection.forward(hidden_flat)
+            logits = logits.reshape(seq_len, self.vocab_size)
         
         return logits
     
-    def generate(self, input_ids: Tensor, max_length: int = 100,
-                 temperature: float = 1.0, top_k: int = 50,
-                 top_p: float = 0.9) -> List[int]:
-        """Autoregressive text generation."""
-        self.eval()
+    def generate(self, prompt_ids: List[int], max_length: int = 100,
+                 temperature: float = 1.0, top_k: int = 50, top_p: float = 0.95) -> List[int]:
+        """
+        Generate text autoregressively
         
-        generated = list(int(x) for x in input_ids.data)
+        Args:
+            prompt_ids: Initial prompt token IDs
+            max_length: Maximum generation length
+            temperature: Sampling temperature (higher = more random)
+            top_k: Top-K filtering (0 = disabled)
+            top_p: Top-P (nucleus) filtering (1.0 = disabled)
+            
+        Returns:
+            Generated token IDs
+            
+        Note:
+            If the generated sequence exceeds the model's max_seq_len from initialization,
+            the model will raise a ValueError. Consider implementing sliding window or
+            truncation strategies for longer sequences.
+        """
+        self.eval()
+        generated = list(prompt_ids)
         
         for _ in range(max_length):
-            # Get logits for last position
-            x = Tensor([float(x) for x in generated])
-            logits = self.forward(x)
+            # Get logits for current sequence
+            input_tensor = Tensor(generated, Shape(len(generated),))
+            logits = self.forward(input_tensor)
             
-            # Get logits for last token
-            last_logits_start = (len(generated) - 1) * self.vocab_size
-            last_logits = logits.data[last_logits_start:last_logits_start + self.vocab_size]
+            # Get logits for last position
+            last_logits_data = logits.data[-self.vocab_size:]
+            last_logits = Tensor(last_logits_data, Shape(self.vocab_size,))
             
             # Apply temperature
             if temperature != 1.0:
-                last_logits = [l / temperature for l in last_logits]
+                scaled_logits = last_logits * (1.0 / temperature)
+            else:
+                scaled_logits = last_logits
             
-            # Top-K filtering
+            # Apply top-k filtering
             if top_k > 0:
-                sorted_indices = sorted(range(len(last_logits)), 
-                                        key=lambda i: last_logits[i], reverse=True)
-                for i in sorted_indices[top_k:]:
-                    last_logits[i] = -1e9
+                scaled_logits = self._top_k_filtering(scaled_logits, top_k)
             
-            # Top-P (nucleus) filtering
+            # Apply top-p filtering
             if top_p < 1.0:
-                sorted_probs = sorted(enumerate(last_logits), 
-                                     key=lambda x: x[1], reverse=True)
-                cumsum = 0.0
-                max_val = max(last_logits)
-                exp_vals = [math.exp(l - max_val) for l in last_logits]
-                sum_exp = sum(exp_vals)
-                probs = [e / sum_exp for e in exp_vals]
-                
-                for i, (idx, _) in enumerate(sorted_probs):
-                    cumsum += probs[idx]
-                    if cumsum > top_p:
-                        for j in range(i + 1, len(sorted_probs)):
-                            last_logits[sorted_probs[j][0]] = -1e9
-                        break
+                scaled_logits = self._top_p_filtering(scaled_logits, top_p)
+            
+            # Convert to probabilities
+            probs = Activations.softmax(scaled_logits)
             
             # Sample from distribution
-            max_val = max(last_logits)
-            exp_vals = [math.exp(l - max_val) for l in last_logits]
-            sum_exp = sum(exp_vals)
-            probs = [e / sum_exp for e in exp_vals]
-            
-            # Sample token
-            r = random.random()
-            cumsum = 0.0
-            next_token = 0
-            for i, p in enumerate(probs):
-                cumsum += p
-                if r <= cumsum:
-                    next_token = i
-                    break
-            
+            next_token = self._sample(probs)
             generated.append(next_token)
             
-            # Check for end token (typically 3 for <EOS>)
-            if next_token == 3:
+            # Check for end-of-sequence token (assuming 0 is EOS)
+            if next_token == 0:
                 break
         
         return generated
     
-    def get_num_parameters(self) -> int:
-        """Get total number of parameters."""
-        total = 0
-        for param in self.parameters():
-            total += len(param.data)
-        return total
+    def _top_k_filtering(self, logits: Tensor, k: int) -> Tensor:
+        """
+        Filter logits to keep only top K values
+        
+        Args:
+            logits: Input logits
+            k: Number of top values to keep
+            
+        Returns:
+            Filtered logits
+        """
+        # Get indices sorted by value
+        indexed_logits = [(i, val) for i, val in enumerate(logits.data)]
+        indexed_logits.sort(key=lambda x: x[1], reverse=True)
+        
+        # Keep top k
+        top_k_indices = set(idx for idx, _ in indexed_logits[:k])
+        
+        # Set others to -inf
+        filtered_data = []
+        for i, val in enumerate(logits.data):
+            if i in top_k_indices:
+                filtered_data.append(val)
+            else:
+                filtered_data.append(-1e9)
+        
+        return Tensor(filtered_data, logits.shape)
+    
+    def _top_p_filtering(self, logits: Tensor, p: float) -> Tensor:
+        """
+        Filter logits using nucleus (top-p) sampling
+        
+        Args:
+            logits: Input logits
+            p: Cumulative probability threshold
+            
+        Returns:
+            Filtered logits
+        """
+        # Convert to probabilities
+        probs = Activations.softmax(logits)
+        
+        # Sort by probability
+        indexed_probs = [(i, val) for i, val in enumerate(probs.data)]
+        indexed_probs.sort(key=lambda x: x[1], reverse=True)
+        
+        # Find cutoff point
+        cumsum = 0.0
+        cutoff_idx = len(indexed_probs)
+        for i, (idx, prob) in enumerate(indexed_probs):
+            cumsum += prob
+            if cumsum >= p:
+                cutoff_idx = i + 1
+                break
+        
+        # Keep top-p tokens
+        top_p_indices = set(idx for idx, _ in indexed_probs[:cutoff_idx])
+        
+        # Filter logits
+        filtered_data = []
+        for i, val in enumerate(logits.data):
+            if i in top_p_indices:
+                filtered_data.append(val)
+            else:
+                filtered_data.append(-1e9)
+        
+        return Tensor(filtered_data, logits.shape)
+    
+    def _sample(self, probs: Tensor) -> int:
+        """
+        Sample from probability distribution
+        
+        Args:
+            probs: Probability distribution
+            
+        Returns:
+            Sampled index
+        """
+        # Multinomial sampling
+        r = random.random()
+        cumsum = 0.0
+        
+        for i, p in enumerate(probs.data):
+            cumsum += p
+            if cumsum >= r:
+                return i
+        
+        # Fallback to last index
+        return len(probs.data) - 1
 
 
 class ModelOptimizer:
-    """Adam optimizer for model training."""
+    """
+    Adam optimizer for model training
+    """
     
-    def __init__(self, parameters: List[Tensor], lr: float = 0.001,
-                 betas: Tuple[float, float] = (0.9, 0.999),
-                 eps: float = 1e-8, weight_decay: float = 0.0):
-        self.parameters = parameters
-        self.lr = lr
-        self.beta1, self.beta2 = betas
-        self.eps = eps
-        self.weight_decay = weight_decay
+    def __init__(self, learning_rate: float = 0.001, beta1: float = 0.9,
+                 beta2: float = 0.999, epsilon: float = 1e-8):
+        """
+        Initialize Adam optimizer
         
-        # Initialize momentum and velocity
-        self.m = [zeros(*p.shape.dims) for p in parameters]
-        self.v = [zeros(*p.shape.dims) for p in parameters]
+        Args:
+            learning_rate: Learning rate
+            beta1: Exponential decay rate for first moment
+            beta2: Exponential decay rate for second moment
+            epsilon: Small constant for numerical stability
+        """
+        self.learning_rate = learning_rate
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.epsilon = epsilon
+        
+        # State
         self.t = 0
+        self.m = {}  # First moment estimates
+        self.v = {}  # Second moment estimates
     
-    def step(self, gradients: List[Tensor]) -> None:
-        """Update parameters using gradients."""
+    def step(self, parameters: List[Tuple[str, Tensor]], gradients: List[Tensor]):
+        """
+        Perform optimization step
+        
+        Args:
+            parameters: List of (name, parameter) tuples
+            gradients: List of gradients corresponding to parameters
+        """
         self.t += 1
         
-        for i, (param, grad) in enumerate(zip(self.parameters, gradients)):
-            if grad is None:
-                continue
+        for (name, param), grad in zip(parameters, gradients):
+            # Initialize moments if needed
+            if name not in self.m:
+                self.m[name] = zeros(*param.shape.dims)
+                self.v[name] = zeros(*param.shape.dims)
             
-            # Update momentum
-            for j in range(len(param.data)):
-                self.m[i].data[j] = self.beta1 * self.m[i].data[j] + (1 - self.beta1) * grad.data[j]
-                self.v[i].data[j] = self.beta2 * self.v[i].data[j] + (1 - self.beta2) * grad.data[j] ** 2
+            # Update biased first moment estimate
+            m_data = []
+            for i in range(len(param.data)):
+                m_val = self.beta1 * self.m[name].data[i] + (1 - self.beta1) * grad.data[i]
+                m_data.append(m_val)
+            self.m[name] = Tensor(m_data, param.shape)
             
-            # Bias correction
-            m_hat = [m / (1 - self.beta1 ** self.t) for m in self.m[i].data]
-            v_hat = [v / (1 - self.beta2 ** self.t) for v in self.v[i].data]
+            # Update biased second moment estimate
+            v_data = []
+            for i in range(len(param.data)):
+                v_val = self.beta2 * self.v[name].data[i] + (1 - self.beta2) * (grad.data[i] ** 2)
+                v_data.append(v_val)
+            self.v[name] = Tensor(v_data, param.shape)
+            
+            # Compute bias-corrected moment estimates
+            m_hat_data = [m / (1 - self.beta1 ** self.t) for m in self.m[name].data]
+            v_hat_data = [v / (1 - self.beta2 ** self.t) for v in self.v[name].data]
             
             # Update parameters
-            for j in range(len(param.data)):
-                # Weight decay
-                if self.weight_decay > 0:
-                    param.data[j] -= self.lr * self.weight_decay * param.data[j]
-                
-                # Adam update
-                param.data[j] -= self.lr * m_hat[j] / (math.sqrt(v_hat[j]) + self.eps)
+            param_data = []
+            for i in range(len(param.data)):
+                update = self.learning_rate * m_hat_data[i] / (math.sqrt(v_hat_data[i]) + self.epsilon)
+                param_data.append(param.data[i] - update)
+            
+            # Update parameter in place
+            param.data = param_data
     
-    def zero_grad(self) -> None:
-        """Reset gradients (placeholder - gradients handled externally)."""
+    def zero_grad(self):
+        """Reset optimizer state"""
         pass
 
 
 class LossFunction:
-    """Cross-entropy loss function."""
+    """
+    Loss functions for training
+    """
     
     @staticmethod
-    def cross_entropy(logits: Tensor, targets: Tensor, 
-                      ignore_index: int = -100) -> Tensor:
-        """Compute cross-entropy loss."""
-        seq_len = len(targets.data)
-        vocab_size = len(logits.data) // seq_len
+    def cross_entropy(logits: Tensor, targets: Tensor, reduction: str = 'mean') -> float:
+        """
+        Cross-entropy loss for classification
         
-        total_loss = 0.0
-        count = 0
-        
-        for i in range(seq_len):
-            target = int(targets.data[i])
-            if target == ignore_index:
-                continue
+        Args:
+            logits: Model predictions (batch_size, num_classes) or (num_classes,)
+            targets: Target labels (batch_size,) or scalar
+            reduction: How to reduce loss ('mean', 'sum', 'none')
             
-            # Get logits for this position
-            pos_logits = logits.data[i * vocab_size:(i + 1) * vocab_size]
+        Returns:
+            Loss value
+        """
+        # Handle different input shapes
+        if logits.shape.ndim == 1:
+            # Single prediction
+            num_classes = logits.shape.dims[0]
+            target_idx = int(targets.data[0] if isinstance(targets, Tensor) else targets)
             
-            # Log-softmax
-            max_logit = max(pos_logits)
-            log_sum_exp = max_logit + math.log(sum(math.exp(l - max_logit) for l in pos_logits))
-            log_prob = pos_logits[target] - log_sum_exp
+            # Apply softmax to get probabilities
+            probs = Activations.softmax(logits)
             
-            total_loss -= log_prob
-            count += 1
+            # Cross-entropy: -log(p[target])
+            target_prob = probs.data[target_idx]
+            loss = -math.log(max(target_prob, 1e-10))
+            
+            return loss
         
-        return Tensor(total_loss / max(count, 1))
-    
-    @staticmethod
-    def mse(predictions: Tensor, targets: Tensor) -> Tensor:
-        """Mean squared error loss."""
-        total = 0.0
-        for p, t in zip(predictions.data, targets.data):
-            total += (p - t) ** 2
-        return Tensor(total / len(predictions.data))
-
-
-class LearningRateScheduler:
-    """Learning rate scheduler with warmup."""
-    
-    def __init__(self, optimizer: ModelOptimizer, warmup_steps: int = 4000,
-                 d_model: int = 512):
-        self.optimizer = optimizer
-        self.warmup_steps = warmup_steps
-        self.d_model = d_model
-        self.current_step = 0
-        self.base_lr = optimizer.lr
-    
-    def step(self) -> float:
-        """Update learning rate and return new value."""
-        self.current_step += 1
+        elif logits.shape.ndim == 2:
+            # Batch of predictions
+            batch_size, num_classes = logits.shape.dims
+            
+            losses = []
+            for i in range(batch_size):
+                # Get logits for this sample
+                sample_logits_data = logits.data[i * num_classes:(i + 1) * num_classes]
+                sample_logits = Tensor(sample_logits_data, Shape(num_classes,))
+                
+                # Get target for this sample
+                target_idx = int(targets.data[i])
+                
+                # Apply softmax
+                probs = Activations.softmax(sample_logits)
+                
+                # Cross-entropy
+                target_prob = probs.data[target_idx]
+                loss = -math.log(max(target_prob, 1e-10))
+                losses.append(loss)
+            
+            if reduction == 'mean':
+                return sum(losses) / len(losses)
+            elif reduction == 'sum':
+                return sum(losses)
+            else:
+                return losses
         
-        # Transformer warmup schedule
-        lr = self.base_lr * min(
-            self.current_step ** (-0.5),
-            self.current_step * self.warmup_steps ** (-1.5)
-        ) * (self.d_model ** (-0.5))
-        
-        self.optimizer.lr = lr
-        return lr
-
-
-class KVCache:
-    """Key-value cache for efficient generation."""
-    
-    def __init__(self, num_layers: int, max_seq_len: int, d_model: int, num_heads: int):
-        self.num_layers = num_layers
-        self.max_seq_len = max_seq_len
-        self.d_model = d_model
-        self.num_heads = num_heads
-        self.d_k = d_model // num_heads
-        
-        self.keys: List[Optional[Tensor]] = [None] * num_layers
-        self.values: List[Optional[Tensor]] = [None] * num_layers
-        self.seq_len = 0
-    
-    def update(self, layer_idx: int, new_key: Tensor, new_value: Tensor) -> Tuple[Tensor, Tensor]:
-        """Update cache and return combined keys/values."""
-        if self.keys[layer_idx] is None:
-            self.keys[layer_idx] = new_key
-            self.values[layer_idx] = new_value
         else:
-            # Concatenate new keys/values
-            old_k = self.keys[layer_idx]
-            old_v = self.values[layer_idx]
-            
-            new_k_data = old_k.data + new_key.data
-            new_v_data = old_v.data + new_value.data
-            
-            old_seq = old_k.shape.dims[0]
-            new_seq = old_seq + new_key.shape.dims[0]
-            
-            self.keys[layer_idx] = Tensor(new_k_data, Shape((new_seq, self.d_model)))
-            self.values[layer_idx] = Tensor(new_v_data, Shape((new_seq, self.d_model)))
-        
-        self.seq_len = self.keys[layer_idx].shape.dims[0]
-        return self.keys[layer_idx], self.values[layer_idx]
+            raise ValueError(f"Unsupported logits shape: {logits.shape}")
     
-    def clear(self) -> None:
-        """Clear the cache."""
-        self.keys = [None] * self.num_layers
-        self.values = [None] * self.num_layers
-        self.seq_len = 0
+    @staticmethod
+    def mse_loss(predictions: Tensor, targets: Tensor, reduction: str = 'mean') -> float:
+        """
+        Mean squared error loss
+        
+        Args:
+            predictions: Model predictions
+            targets: Target values
+            reduction: How to reduce loss ('mean', 'sum', 'none')
+            
+        Returns:
+            Loss value
+        """
+        # Compute squared differences
+        squared_diffs = []
+        for pred, target in zip(predictions.data, targets.data):
+            squared_diffs.append((pred - target) ** 2)
+        
+        if reduction == 'mean':
+            return sum(squared_diffs) / len(squared_diffs)
+        elif reduction == 'sum':
+            return sum(squared_diffs)
+        else:
+            return squared_diffs
+    
+    @staticmethod
+    def binary_cross_entropy(predictions: Tensor, targets: Tensor, 
+                            reduction: str = 'mean') -> float:
+        """
+        Binary cross-entropy loss
+        
+        Args:
+            predictions: Model predictions (probabilities between 0 and 1)
+            targets: Target binary labels (0 or 1)
+            reduction: How to reduce loss ('mean', 'sum', 'none')
+            
+        Returns:
+            Loss value
+        """
+        losses = []
+        for pred, target in zip(predictions.data, targets.data):
+            # Clip predictions to avoid log(0)
+            pred = max(min(pred, 1 - 1e-7), 1e-7)
+            
+            # Binary cross-entropy: -[y*log(p) + (1-y)*log(1-p)]
+            loss = -(target * math.log(pred) + (1 - target) * math.log(1 - pred))
+            losses.append(loss)
+        
+        if reduction == 'mean':
+            return sum(losses) / len(losses)
+        elif reduction == 'sum':
+            return sum(losses)
+        else:
+            return losses
+
+
+class SimpleClassifier(Layer):
+    """
+    Simple feedforward classifier
+    """
+    
+    def __init__(self, input_dim: int, hidden_dim: int, num_classes: int, dropout: float = 0.1):
+        """
+        Initialize classifier
+        
+        Args:
+            input_dim: Input feature dimension
+            hidden_dim: Hidden layer dimension
+            num_classes: Number of output classes
+            dropout: Dropout probability
+        """
+        super().__init__()
+        
+        self.fc1 = Linear(input_dim, hidden_dim)
+        self.fc2 = Linear(hidden_dim, num_classes)
+        self.dropout = Dropout(dropout)
+    
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Forward pass through classifier
+        
+        Args:
+            x: Input tensor (batch_size, input_dim) or (input_dim,)
+            
+        Returns:
+            Logits (batch_size, num_classes) or (num_classes,)
+        """
+        # First layer + activation + dropout
+        hidden = self.fc1.forward(x)
+        hidden = Activations.relu(hidden)
+        hidden = self.dropout.forward(hidden)
+        
+        # Output layer
+        logits = self.fc2.forward(hidden)
+        
+        return logits
+
+
+class Seq2SeqModel(Layer):
+    """
+    Sequence-to-sequence model with encoder-decoder architecture
+    """
+    
+    def __init__(self, vocab_size: int, d_model: int = 512, num_layers: int = 6,
+                 num_heads: int = 8, d_ff: int = 2048, dropout: float = 0.1):
+        """
+        Initialize seq2seq model
+        
+        Args:
+            vocab_size: Size of vocabulary
+            d_model: Dimension of model embeddings
+            num_layers: Number of transformer layers
+            num_heads: Number of attention heads
+            d_ff: Dimension of feed-forward hidden layer
+            dropout: Dropout probability
+        """
+        super().__init__()
+        
+        # Embeddings
+        self.encoder_embedding = Embedding(vocab_size, d_model)
+        self.decoder_embedding = Embedding(vocab_size, d_model)
+        self.position_encoding = PositionalEncoding(d_model)
+        
+        # Encoder and decoder
+        self.encoder = TransformerEncoder(num_layers, d_model, num_heads, d_ff, dropout)
+        self.decoder = TransformerDecoder(num_layers, d_model, num_heads, d_ff, dropout)
+        
+        # Output projection
+        self.output_projection = Linear(d_model, vocab_size)
+    
+    def forward(self, encoder_input: Tensor, decoder_input: Tensor) -> Tensor:
+        """
+        Forward pass through seq2seq model
+        
+        Args:
+            encoder_input: Encoder input token IDs
+            decoder_input: Decoder input token IDs
+            
+        Returns:
+            Output logits
+        """
+        # Encode
+        encoder_embeddings = self.encoder_embedding.forward(encoder_input)
+        encoder_embeddings = self.position_encoding.forward(encoder_embeddings)
+        encoder_output = self.encoder.forward(encoder_embeddings)
+        
+        # Decode
+        decoder_embeddings = self.decoder_embedding.forward(decoder_input)
+        decoder_embeddings = self.position_encoding.forward(decoder_embeddings)
+        decoder_output = self.decoder.forward(decoder_embeddings)
+        
+        # Project to vocabulary
+        logits = self.output_projection.forward(decoder_output)
+        
+        return logits
+
+
+class ModelUtils:
+    """
+    Utility functions for model operations
+    """
+    
+    @staticmethod
+    def count_parameters(model: Layer) -> int:
+        """
+        Count total number of parameters in a model
+        
+        Args:
+            model: Model instance
+            
+        Returns:
+            Total parameter count
+        """
+        total = 0
+        
+        # Count parameters in all layer attributes
+        for attr_name in dir(model):
+            attr = getattr(model, attr_name)
+            
+            # Check if it's a layer
+            if isinstance(attr, Layer):
+                # Recursively count parameters
+                total += ModelUtils.count_parameters(attr)
+            
+            # Check if it's a tensor (parameter)
+            elif isinstance(attr, Tensor):
+                total += attr.shape.size
+        
+        return total
+    
+    @staticmethod
+    def model_summary(model: Layer) -> str:
+        """
+        Generate a summary of model architecture
+        
+        Args:
+            model: Model instance
+            
+        Returns:
+            Summary string
+        """
+        summary = []
+        summary.append("="*60)
+        summary.append(f"Model: {model.__class__.__name__}")
+        summary.append("="*60)
+        
+        total_params = ModelUtils.count_parameters(model)
+        summary.append(f"Total Parameters: {total_params:,}")
+        
+        return "\n".join(summary)
+
+
+__all__ = [
+    'THALOSPrimeModel',
+    'ModelOptimizer',
+    'LossFunction',
+    'SimpleClassifier',
+    'Seq2SeqModel',
+    'ModelUtils',
+]

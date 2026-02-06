@@ -1,270 +1,666 @@
+#!/usr/bin/env python3
 """
-THALOS Prime - Transformer Architecture Module
-Multi-head attention, feed-forward networks, and transformer blocks.
+THALOS Prime Transformer Components
+Pure Python implementation of transformer architecture
 """
 
-from typing import Optional, List
 import math
-import random
-from .layer import Layer, Linear, Dropout, LayerNormLayer
-from ..math.tensor import Tensor, Shape, zeros
+from typing import Optional
+
+from ..math import Tensor, Shape, zeros, ones
+from ..math.linear_algebra import LinearAlgebra
 from ..math.activations import Activations
+from ..math.attention import AttentionMechanisms
+from .layer import Layer, Linear, Dropout, LayerNorm
 
 
 class MultiHeadAttention(Layer):
-    """Multi-head attention mechanism."""
+    """
+    Multi-head attention mechanism
+    Allows the model to jointly attend to information from different representation subspaces
+    """
     
-    def __init__(self, d_model: int, num_heads: int, dropout: float = 0.0):
+    def __init__(self, d_model: int, num_heads: int, dropout: float = 0.1):
+        """
+        Initialize multi-head attention
+        
+        Args:
+            d_model: Dimension of model embeddings
+            num_heads: Number of attention heads
+            dropout: Dropout probability
+        """
         super().__init__()
-        assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
+        
+        if d_model % num_heads != 0:
+            raise ValueError(f"d_model ({d_model}) must be divisible by num_heads ({num_heads})")
         
         self.d_model = d_model
         self.num_heads = num_heads
         self.d_k = d_model // num_heads
-        self.dropout = dropout
         
-        # Projection layers
-        self.w_q = Linear(d_model, d_model, bias=False)
-        self.w_k = Linear(d_model, d_model, bias=False)
-        self.w_v = Linear(d_model, d_model, bias=False)
-        self.w_o = Linear(d_model, d_model, bias=False)
+        # Linear projections for Q, K, V
+        self.q_linear = Linear(d_model, d_model)
+        self.k_linear = Linear(d_model, d_model)
+        self.v_linear = Linear(d_model, d_model)
         
-        self._parameters.update(self.w_q._parameters)
-        self._parameters.update(self.w_k._parameters)
-        self._parameters.update(self.w_v._parameters)
-        self._parameters.update(self.w_o._parameters)
+        # Output projection
+        self.out_linear = Linear(d_model, d_model)
+        
+        # Dropout
+        self.dropout = Dropout(dropout)
     
-    def _scaled_dot_product_attention(self, q: Tensor, k: Tensor, v: Tensor,
-                                       mask: Optional[Tensor] = None) -> Tensor:
-        """Scaled dot-product attention."""
-        seq_q = q.shape.dims[0]
-        seq_k = k.shape.dims[0]
-        d_k = q.shape.dims[1]
-        d_v = v.shape.dims[1]
+    def _split_heads(self, x: Tensor, batch_size: int, seq_len: int) -> Tensor:
+        """
+        Split tensor into multiple heads
         
-        scale = 1.0 / math.sqrt(d_k)
-        
-        # Compute attention scores
-        scores_data = []
-        for i in range(seq_q):
-            for j in range(seq_k):
-                score = 0.0
-                for k_idx in range(d_k):
-                    score += q.data[i * d_k + k_idx] * k.data[j * d_k + k_idx]
-                scores_data.append(score * scale)
-        
-        # Apply mask
-        if mask is not None:
-            for i in range(seq_q):
-                for j in range(seq_k):
-                    if mask.data[i * seq_k + j] == 0:
-                        scores_data[i * seq_k + j] = -1e9
-        
-        # Softmax over keys
-        attention_data = []
-        for i in range(seq_q):
-            row = scores_data[i * seq_k:(i + 1) * seq_k]
-            max_val = max(row)
-            exp_vals = [math.exp(s - max_val) for s in row]
-            sum_exp = sum(exp_vals)
-            attention_data.extend([e / sum_exp for e in exp_vals])
-        
-        # Apply dropout
-        if self.training and self.dropout > 0:
-            for i in range(len(attention_data)):
-                if random.random() < self.dropout:
-                    attention_data[i] = 0.0
-        
-        # Compute output
-        output_data = []
-        for i in range(seq_q):
-            for k_idx in range(d_v):
-                val = 0.0
-                for j in range(seq_k):
-                    val += attention_data[i * seq_k + j] * v.data[j * d_v + k_idx]
-                output_data.append(val)
-        
-        return Tensor(output_data, Shape((seq_q, d_v)))
-    
-    def forward(self, query: Tensor, key: Tensor, value: Tensor,
-                mask: Optional[Tensor] = None) -> Tensor:
-        """Multi-head attention forward pass."""
-        seq_q = query.shape.dims[0]
-        seq_k = key.shape.dims[0]
-        
-        # Project Q, K, V
-        q = self.w_q(query)
-        k = self.w_k(key)
-        v = self.w_v(value)
-        
-        # Split into heads and compute attention
-        head_outputs = []
-        for h in range(self.num_heads):
-            start = h * self.d_k
-            end = start + self.d_k
+        Args:
+            x: Input tensor (batch_size * seq_len, d_model)
+            batch_size: Batch size
+            seq_len: Sequence length
             
-            # Extract head slice
+        Returns:
+            Reshaped tensor (batch_size, num_heads, seq_len, d_k)
+        """
+        # Reshape to (batch_size, seq_len, num_heads, d_k)
+        data = []
+        for b in range(batch_size):
+            for h in range(self.num_heads):
+                for s in range(seq_len):
+                    for d in range(self.d_k):
+                        idx = b * seq_len * self.d_model + s * self.d_model + h * self.d_k + d
+                        data.append(x.data[idx])
+        
+        return Tensor(data, Shape(batch_size, self.num_heads, seq_len, self.d_k))
+    
+    def _merge_heads(self, x: Tensor, batch_size: int, seq_len: int) -> Tensor:
+        """
+        Merge multiple heads back together
+        
+        Args:
+            x: Input tensor (batch_size, num_heads, seq_len, d_k)
+            batch_size: Batch size
+            seq_len: Sequence length
+            
+        Returns:
+            Merged tensor (batch_size, seq_len, d_model)
+        """
+        # Reshape from (batch_size, num_heads, seq_len, d_k) to (batch_size, seq_len, d_model)
+        data = []
+        for b in range(batch_size):
+            for s in range(seq_len):
+                for h in range(self.num_heads):
+                    for d in range(self.d_k):
+                        idx = b * self.num_heads * seq_len * self.d_k + h * seq_len * self.d_k + s * self.d_k + d
+                        data.append(x.data[idx])
+        
+        return Tensor(data, Shape(batch_size, seq_len, self.d_model))
+    
+    def forward(self, query: Tensor, key: Tensor, value: Tensor, 
+                mask: Optional[Tensor] = None) -> Tensor:
+        """
+        Forward pass through multi-head attention
+        
+        Args:
+            query: Query tensor (batch_size, seq_len, d_model) or (seq_len, d_model)
+            key: Key tensor
+            value: Value tensor
+            mask: Optional attention mask
+            
+        Returns:
+            Output tensor
+        """
+        # Handle 2D input (seq_len, d_model) by adding batch dimension
+        if query.shape.ndim == 2:
+            seq_len, d_model = query.shape.dims
+            batch_size = 1
+            query = query.reshape(1, seq_len, d_model)
+            key = key.reshape(1, seq_len, d_model)
+            value = value.reshape(1, seq_len, d_model)
+            squeeze_output = True
+        else:
+            batch_size, seq_len, d_model = query.shape.dims
+            squeeze_output = False
+        
+        # Linear projections
+        q = self.q_linear.forward(query.reshape(batch_size * seq_len, d_model))
+        k = self.k_linear.forward(key.reshape(batch_size * seq_len, d_model))
+        v = self.v_linear.forward(value.reshape(batch_size * seq_len, d_model))
+        
+        # Reshape for multi-head attention: (batch_size, num_heads, seq_len, d_k)
+        q = self._split_heads(q, batch_size, seq_len)
+        k = self._split_heads(k, batch_size, seq_len)
+        v = self._split_heads(v, batch_size, seq_len)
+        
+        # Compute attention for each head (simplified - process all heads together)
+        # For simplicity, we'll process each head separately
+        attention_outputs = []
+        
+        for h in range(self.num_heads):
+            # Extract head h: (batch_size, seq_len, d_k)
             q_h_data = []
             k_h_data = []
             v_h_data = []
             
-            for i in range(seq_q):
-                for j in range(start, end):
-                    q_h_data.append(q.data[i * self.d_model + j])
+            for b in range(batch_size):
+                for s in range(seq_len):
+                    for d in range(self.d_k):
+                        idx = b * self.num_heads * seq_len * self.d_k + h * seq_len * self.d_k + s * self.d_k + d
+                        q_h_data.append(q.data[idx])
+                        k_h_data.append(k.data[idx])
+                        v_h_data.append(v.data[idx])
             
-            for i in range(seq_k):
-                for j in range(start, end):
-                    k_h_data.append(k.data[i * self.d_model + j])
-                    v_h_data.append(v.data[i * self.d_model + j])
+            q_h = Tensor(q_h_data, Shape(batch_size, seq_len, self.d_k))
+            k_h = Tensor(k_h_data, Shape(batch_size, seq_len, self.d_k))
+            v_h = Tensor(v_h_data, Shape(batch_size, seq_len, self.d_k))
             
-            q_h = Tensor(q_h_data, Shape((seq_q, self.d_k)))
-            k_h = Tensor(k_h_data, Shape((seq_k, self.d_k)))
-            v_h = Tensor(v_h_data, Shape((seq_k, self.d_k)))
+            # Apply scaled dot-product attention for this head
+            # For each batch item
+            head_outputs = []
+            for b in range(batch_size):
+                # Extract batch b
+                q_b_data = q_h.data[b * seq_len * self.d_k:(b + 1) * seq_len * self.d_k]
+                k_b_data = k_h.data[b * seq_len * self.d_k:(b + 1) * seq_len * self.d_k]
+                v_b_data = v_h.data[b * seq_len * self.d_k:(b + 1) * seq_len * self.d_k]
+                
+                q_b = Tensor(q_b_data, Shape(seq_len, self.d_k))
+                k_b = Tensor(k_b_data, Shape(seq_len, self.d_k))
+                v_b = Tensor(v_b_data, Shape(seq_len, self.d_k))
+                
+                attn_output, _ = AttentionMechanisms.scaled_dot_product_attention(
+                    q_b, k_b, v_b, mask=mask, dropout_p=0.0
+                )
+                head_outputs.append(attn_output)
             
-            attn_out = self._scaled_dot_product_attention(q_h, k_h, v_h, mask)
-            head_outputs.append(attn_out)
+            attention_outputs.append(head_outputs)
         
         # Concatenate heads
         concat_data = []
-        for i in range(seq_q):
-            for h in range(self.num_heads):
-                for j in range(self.d_k):
-                    concat_data.append(head_outputs[h].data[i * self.d_k + j])
+        for b in range(batch_size):
+            for s in range(seq_len):
+                for h in range(self.num_heads):
+                    for d in range(self.d_k):
+                        idx = s * self.d_k + d
+                        concat_data.append(attention_outputs[h][b].data[idx])
         
-        concat = Tensor(concat_data, Shape((seq_q, self.d_model)))
+        concat_output = Tensor(concat_data, Shape(batch_size, seq_len, self.d_model))
         
-        # Final projection
-        return self.w_o(concat)
+        # Final linear projection
+        output = self.out_linear.forward(concat_output.reshape(batch_size * seq_len, self.d_model))
+        output = output.reshape(batch_size, seq_len, self.d_model)
+        
+        # Apply dropout
+        output = self.dropout.forward(output)
+        
+        # Remove batch dimension if input was 2D
+        if squeeze_output:
+            output = output.reshape(seq_len, self.d_model)
+        
+        return output
 
 
 class FeedForwardNetwork(Layer):
-    """Position-wise feed-forward network."""
+    """
+    Position-wise feed-forward network
+    Two-layer MLP with activation in between
+    """
     
-    def __init__(self, d_model: int, d_ff: int, dropout: float = 0.0):
+    def __init__(self, d_model: int, d_ff: int, dropout: float = 0.1):
+        """
+        Initialize feed-forward network
+        
+        Args:
+            d_model: Dimension of model embeddings
+            d_ff: Dimension of feed-forward hidden layer
+            dropout: Dropout probability
+        """
         super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+        
+        # Two linear layers
         self.linear1 = Linear(d_model, d_ff)
         self.linear2 = Linear(d_ff, d_model)
-        self.dropout_layer = Dropout(dropout)
         
-        self._parameters.update(self.linear1._parameters)
-        self._parameters.update(self.linear2._parameters)
+        # Dropout
+        self.dropout = Dropout(dropout)
     
     def forward(self, x: Tensor) -> Tensor:
-        """FFN forward pass: Linear -> GELU -> Dropout -> Linear."""
-        x = self.linear1(x)
-        x = Activations.gelu(x)
-        x = self.dropout_layer(x)
-        x = self.linear2(x)
-        return x
+        """
+        Forward pass through FFN
+        
+        Args:
+            x: Input tensor (batch_size, seq_len, d_model) or (seq_len, d_model)
+            
+        Returns:
+            Output tensor
+        """
+        original_shape = x.shape.dims
+        
+        # Reshape to 2D for linear layers
+        if x.shape.ndim == 3:
+            batch_size, seq_len, d_model = original_shape
+            x_flat = x.reshape(batch_size * seq_len, d_model)
+        elif x.shape.ndim == 2:
+            seq_len, d_model = original_shape
+            x_flat = x
+        else:
+            x_flat = x
+        
+        # First linear + GELU activation
+        hidden = self.linear1.forward(x_flat)
+        hidden = Activations.gelu(hidden)
+        hidden = self.dropout.forward(hidden)
+        
+        # Second linear
+        output = self.linear2.forward(hidden)
+        output = self.dropout.forward(output)
+        
+        # Reshape back to original
+        if x.shape.ndim == 3:
+            output = output.reshape(*original_shape)
+        
+        return output
 
 
 class TransformerBlock(Layer):
-    """Single transformer block with attention and FFN."""
+    """
+    Transformer block with self-attention and feed-forward network
+    Includes residual connections and layer normalization
+    """
     
     def __init__(self, d_model: int, num_heads: int, d_ff: int, dropout: float = 0.1):
-        super().__init__()
-        self.attention = MultiHeadAttention(d_model, num_heads, dropout)
-        self.ffn = FeedForwardNetwork(d_model, d_ff, dropout)
-        self.norm1 = LayerNormLayer(d_model)
-        self.norm2 = LayerNormLayer(d_model)
-        self.dropout1 = Dropout(dropout)
-        self.dropout2 = Dropout(dropout)
+        """
+        Initialize transformer block
         
-        self._parameters.update(self.attention._parameters)
-        self._parameters.update(self.ffn._parameters)
-        self._parameters.update(self.norm1._parameters)
-        self._parameters.update(self.norm2._parameters)
+        Args:
+            d_model: Dimension of model embeddings
+            num_heads: Number of attention heads
+            d_ff: Dimension of feed-forward hidden layer
+            dropout: Dropout probability
+        """
+        super().__init__()
+        self.d_model = d_model
+        
+        # Multi-head attention
+        self.attention = MultiHeadAttention(d_model, num_heads, dropout)
+        
+        # Feed-forward network
+        self.ffn = FeedForwardNetwork(d_model, d_ff, dropout)
+        
+        # Layer normalization
+        self.norm1 = LayerNorm(d_model)
+        self.norm2 = LayerNorm(d_model)
+        
+        # Dropout
+        self.dropout = Dropout(dropout)
     
     def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
-        """Transformer block forward pass with residual connections."""
-        # Self-attention with residual
-        attn_out = self.attention(x, x, x, mask)
-        attn_out = self.dropout1(attn_out)
+        """
+        Forward pass through transformer block
         
-        # Add residual and normalize
-        residual1_data = [x.data[i] + attn_out.data[i] for i in range(len(x.data))]
-        x = self.norm1(Tensor(residual1_data, x.shape))
+        Args:
+            x: Input tensor (batch_size, seq_len, d_model) or (seq_len, d_model)
+            mask: Optional attention mask
+            
+        Returns:
+            Output tensor
+        """
+        # Self-attention with residual connection and layer norm
+        attn_output = self.attention.forward(x, x, x, mask)
+        x = x + attn_output  # Residual connection
+        x = self.norm1.forward(x)
         
-        # FFN with residual
-        ffn_out = self.ffn(x)
-        ffn_out = self.dropout2(ffn_out)
-        
-        # Add residual and normalize
-        residual2_data = [x.data[i] + ffn_out.data[i] for i in range(len(x.data))]
-        x = self.norm2(Tensor(residual2_data, x.shape))
+        # Feed-forward with residual connection and layer norm
+        ffn_output = self.ffn.forward(x)
+        x = x + ffn_output  # Residual connection
+        x = self.norm2.forward(x)
         
         return x
 
 
 class TransformerEncoder(Layer):
-    """Stack of transformer encoder blocks."""
+    """
+    Stack of transformer encoder blocks
+    """
     
     def __init__(self, num_layers: int, d_model: int, num_heads: int, 
                  d_ff: int, dropout: float = 0.1):
-        super().__init__()
-        self.layers = [TransformerBlock(d_model, num_heads, d_ff, dropout) 
-                       for _ in range(num_layers)]
+        """
+        Initialize transformer encoder
         
-        for i, layer in enumerate(self.layers):
-            for name, param in layer._parameters.items():
-                self._parameters[f'layer{i}_{name}'] = param
+        Args:
+            num_layers: Number of transformer blocks
+            d_model: Dimension of model embeddings
+            num_heads: Number of attention heads
+            d_ff: Dimension of feed-forward hidden layer
+            dropout: Dropout probability
+        """
+        super().__init__()
+        self.num_layers = num_layers
+        
+        # Stack of transformer blocks
+        self.blocks = [
+            TransformerBlock(d_model, num_heads, d_ff, dropout)
+            for _ in range(num_layers)
+        ]
+        
+        # Final layer norm
+        self.norm = LayerNorm(d_model)
     
     def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
-        """Forward through all encoder layers."""
-        for layer in self.layers:
-            x = layer(x, mask)
+        """
+        Forward pass through encoder stack
+        
+        Args:
+            x: Input tensor (batch_size, seq_len, d_model) or (seq_len, d_model)
+            mask: Optional attention mask
+            
+        Returns:
+            Encoded tensor
+        """
+        for block in self.blocks:
+            x = block.forward(x, mask)
+        
+        x = self.norm.forward(x)
         return x
 
 
 class TransformerDecoder(Layer):
-    """Stack of transformer decoder blocks with causal masking."""
+    """
+    Stack of transformer decoder blocks with causal masking
+    """
     
-    def __init__(self, num_layers: int, d_model: int, num_heads: int, 
+    def __init__(self, num_layers: int, d_model: int, num_heads: int,
                  d_ff: int, dropout: float = 0.1):
-        super().__init__()
-        self.layers = [TransformerBlock(d_model, num_heads, d_ff, dropout) 
-                       for _ in range(num_layers)]
+        """
+        Initialize transformer decoder
         
-        for i, layer in enumerate(self.layers):
-            for name, param in layer._parameters.items():
-                self._parameters[f'layer{i}_{name}'] = param
+        Args:
+            num_layers: Number of transformer blocks
+            d_model: Dimension of model embeddings
+            num_heads: Number of attention heads
+            d_ff: Dimension of feed-forward hidden layer
+            dropout: Dropout probability
+        """
+        super().__init__()
+        self.num_layers = num_layers
+        
+        # Stack of decoder blocks
+        self.blocks = [
+            TransformerBlock(d_model, num_heads, d_ff, dropout)
+            for _ in range(num_layers)
+        ]
+        
+        # Final layer norm
+        self.norm = LayerNorm(d_model)
     
     def _create_causal_mask(self, seq_len: int) -> Tensor:
-        """Create causal attention mask."""
+        """
+        Create causal mask for autoregressive generation
+        
+        Args:
+            seq_len: Sequence length
+            
+        Returns:
+            Causal mask tensor
+        """
         mask_data = []
         for i in range(seq_len):
             for j in range(seq_len):
+                # Can attend to positions <= current position
                 mask_data.append(1.0 if j <= i else 0.0)
-        return Tensor(mask_data, Shape((seq_len, seq_len)))
+        
+        return Tensor(mask_data, Shape(seq_len, seq_len))
     
-    def forward(self, x: Tensor, encoder_output: Optional[Tensor] = None) -> Tensor:
-        """Forward through all decoder layers with causal masking."""
-        seq_len = x.shape.dims[0]
+    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+        """
+        Forward pass through decoder stack with causal masking
+        
+        Args:
+            x: Input tensor (batch_size, seq_len, d_model) or (seq_len, d_model)
+            mask: Optional additional mask
+            
+        Returns:
+            Decoded tensor
+        """
+        # Get sequence length
+        if x.shape.ndim == 3:
+            seq_len = x.shape.dims[1]
+        else:
+            seq_len = x.shape.dims[0]
+        
+        # Create causal mask
         causal_mask = self._create_causal_mask(seq_len)
         
-        for layer in self.layers:
-            x = layer(x, causal_mask)
+        # Combine with provided mask if any
+        if mask is not None:
+            # Element-wise multiplication
+            combined_mask_data = [
+                causal_mask.data[i] * mask.data[i]
+                for i in range(len(causal_mask.data))
+            ]
+            final_mask = Tensor(combined_mask_data, causal_mask.shape)
+        else:
+            final_mask = causal_mask
         
+        # Pass through decoder blocks
+        for block in self.blocks:
+            x = block.forward(x, final_mask)
+        
+        x = self.norm.forward(x)
         return x
 
 
 class CrossAttentionBlock(Layer):
-    """Cross-attention block for encoder-decoder architectures."""
+    """
+    Cross-attention block for encoder-decoder architecture
+    """
     
     def __init__(self, d_model: int, num_heads: int, dropout: float = 0.1):
+        """
+        Initialize cross-attention block
+        
+        Args:
+            d_model: Dimension of model embeddings
+            num_heads: Number of attention heads
+            dropout: Dropout probability
+        """
         super().__init__()
+        
+        # Self-attention on decoder
+        self.self_attention = MultiHeadAttention(d_model, num_heads, dropout)
+        
+        # Cross-attention with encoder output
         self.cross_attention = MultiHeadAttention(d_model, num_heads, dropout)
-        self.norm = LayerNormLayer(d_model)
-        self.dropout_layer = Dropout(dropout)
         
-        self._parameters.update(self.cross_attention._parameters)
-        self._parameters.update(self.norm._parameters)
+        # Feed-forward network
+        self.ffn = FeedForwardNetwork(d_model, d_model * 4, dropout)
+        
+        # Layer normalization
+        self.norm1 = LayerNorm(d_model)
+        self.norm2 = LayerNorm(d_model)
+        self.norm3 = LayerNorm(d_model)
     
-    def forward(self, query: Tensor, encoder_output: Tensor) -> Tensor:
-        """Cross-attention with encoder output."""
-        attn_out = self.cross_attention(query, encoder_output, encoder_output)
-        attn_out = self.dropout_layer(attn_out)
+    def forward(self, decoder_input: Tensor, encoder_output: Tensor,
+                decoder_mask: Optional[Tensor] = None,
+                encoder_mask: Optional[Tensor] = None) -> Tensor:
+        """
+        Forward pass through cross-attention block
         
-        # Residual connection
-        residual_data = [query.data[i] + attn_out.data[i] for i in range(len(query.data))]
-        return self.norm(Tensor(residual_data, query.shape))
+        Args:
+            decoder_input: Decoder input tensor
+            encoder_output: Encoder output tensor
+            decoder_mask: Optional decoder mask
+            encoder_mask: Optional encoder mask
+            
+        Returns:
+            Output tensor
+        """
+        # Self-attention on decoder
+        attn_output = self.self_attention.forward(
+            decoder_input, decoder_input, decoder_input, decoder_mask
+        )
+        decoder_input = decoder_input + attn_output
+        decoder_input = self.norm1.forward(decoder_input)
+        
+        # Cross-attention with encoder
+        cross_attn_output = self.cross_attention.forward(
+            decoder_input, encoder_output, encoder_output, encoder_mask
+        )
+        decoder_input = decoder_input + cross_attn_output
+        decoder_input = self.norm2.forward(decoder_input)
+        
+        # Feed-forward
+        ffn_output = self.ffn.forward(decoder_input)
+        output = decoder_input + ffn_output
+        output = self.norm3.forward(output)
+        
+        return output
+
+
+class EncoderDecoderModel(Layer):
+    """
+    Complete encoder-decoder transformer model
+    Used for sequence-to-sequence tasks like translation
+    """
+    
+    def __init__(self, vocab_size: int, d_model: int = 512, num_layers: int = 6,
+                 num_heads: int = 8, d_ff: int = 2048, max_seq_len: int = 512,
+                 dropout: float = 0.1):
+        """
+        Initialize encoder-decoder model
+        
+        Args:
+            vocab_size: Size of vocabulary
+            d_model: Dimension of model embeddings
+            num_layers: Number of transformer layers
+            num_heads: Number of attention heads
+            d_ff: Dimension of feed-forward hidden layer
+            max_seq_len: Maximum sequence length
+            dropout: Dropout probability
+        """
+        super().__init__()
+        
+        # Encoder
+        self.encoder = TransformerEncoder(num_layers, d_model, num_heads, d_ff, dropout)
+        
+        # Decoder with cross-attention blocks
+        self.decoder_blocks = [
+            CrossAttentionBlock(d_model, num_heads, dropout)
+            for _ in range(num_layers)
+        ]
+        
+        self.final_norm = LayerNorm(d_model)
+    
+    def forward(self, encoder_input: Tensor, decoder_input: Tensor,
+                encoder_mask: Optional[Tensor] = None,
+                decoder_mask: Optional[Tensor] = None) -> Tensor:
+        """
+        Forward pass through encoder-decoder
+        
+        Args:
+            encoder_input: Encoder input tensor
+            decoder_input: Decoder input tensor
+            encoder_mask: Optional encoder mask
+            decoder_mask: Optional decoder mask
+            
+        Returns:
+            Decoder output tensor
+        """
+        # Encode
+        encoder_output = self.encoder.forward(encoder_input, encoder_mask)
+        
+        # Decode with cross-attention to encoder output
+        decoder_output = decoder_input
+        for block in self.decoder_blocks:
+            decoder_output = block.forward(
+                decoder_output, encoder_output,
+                decoder_mask, encoder_mask
+            )
+        
+        decoder_output = self.final_norm.forward(decoder_output)
+        
+        return decoder_output
+
+
+class PositionWiseFeedForward(Layer):
+    """
+    Alternative implementation of position-wise feed-forward network
+    with configurable activation function
+    """
+    
+    def __init__(self, d_model: int, d_ff: int, dropout: float = 0.1,
+                 activation: str = 'relu'):
+        """
+        Initialize position-wise FFN
+        
+        Args:
+            d_model: Model dimension
+            d_ff: Feed-forward dimension
+            dropout: Dropout probability
+            activation: Activation function ('relu', 'gelu', 'swish')
+        """
+        super().__init__()
+        
+        self.fc1 = Linear(d_model, d_ff)
+        self.fc2 = Linear(d_ff, d_model)
+        self.dropout = Dropout(dropout)
+        self.activation = activation
+    
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Forward pass
+        
+        Args:
+            x: Input tensor
+            
+        Returns:
+            Output tensor
+        """
+        original_shape = x.shape.dims
+        
+        # Flatten if needed
+        if x.shape.ndim > 2:
+            batch_size = 1
+            for dim in original_shape[:-1]:
+                batch_size *= dim
+            x_flat = x.reshape(batch_size, original_shape[-1])
+        else:
+            x_flat = x
+        
+        # First linear
+        hidden = self.fc1.forward(x_flat)
+        
+        # Activation
+        if self.activation == 'relu':
+            hidden = Activations.relu(hidden)
+        elif self.activation == 'gelu':
+            hidden = Activations.gelu(hidden)
+        elif self.activation == 'swish':
+            hidden = Activations.swish(hidden)
+        else:
+            raise ValueError(f"Unknown activation: {self.activation}")
+        
+        hidden = self.dropout.forward(hidden)
+        
+        # Second linear
+        output = self.fc2.forward(hidden)
+        output = self.dropout.forward(output)
+        
+        # Reshape back
+        if x.shape.ndim > 2:
+            output = output.reshape(*original_shape)
+        
+        return output
+
+
+__all__ = [
+    'MultiHeadAttention',
+    'FeedForwardNetwork',
+    'TransformerBlock',
+    'TransformerEncoder',
+    'TransformerDecoder',
+    'CrossAttentionBlock',
+    'EncoderDecoderModel',
+    'PositionWiseFeedForward',
+]
