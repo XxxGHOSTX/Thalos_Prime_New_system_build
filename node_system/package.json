@@ -1,0 +1,25 @@
+{
+  "name": "thalos-prime-node",
+  "version": "1.0.0",
+  "description": "Thalos Prime - Decentralized data streams and automation engine",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Tests pending\" && exit 0"
+  },
+  "keywords": [
+    "thalos",
+    "automation",
+    "data-streams"
+  ],
+  "author": "Thalos Prime Systems",
+  "license": "Proprietary",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "dotenv": "^16.3.1",
+    "events": "^3.3.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
