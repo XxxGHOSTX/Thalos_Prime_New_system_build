@@ -1,249 +1,369 @@
 """
 THALOS Prime - Storage Module
-Model checkpoints, experience database, and knowledge persistence.
+
+Provides persistent storage for models, experiences, and knowledge.
+
+Components:
+    - ModelManager: Checkpoint management
+    - ExperienceDatabase: Interaction logging
+    - KnowledgeBase: Knowledge graph storage
+
+Author: THALOS Prime Development Team
+License: MIT
 """
 
-from typing import Dict, Any, Optional, List
 import json
-import os
-import time
+import sqlite3
+from typing import Dict, List, Optional, Any, Tuple
+from pathlib import Path
+from datetime import datetime
 
 
 class ModelManager:
-    """Manage model checkpoints and states."""
+    """
+    Manages model checkpoints with versioning and metadata.
     
-    def __init__(self, checkpoint_dir: str = './checkpoints'):
-        self.checkpoint_dir = checkpoint_dir
-        os.makedirs(checkpoint_dir, exist_ok=True)
+    Features:
+        - Automatic checkpoint versioning
+        - Metadata tracking (loss, accuracy, etc.)
+        - Best model selection
+        - Checkpoint cleanup
+    """
     
-    def save_checkpoint(self, model_state: Dict[str, Any], 
-                        optimizer_state: Optional[Dict] = None,
-                        epoch: int = 0, step: int = 0,
-                        metadata: Optional[Dict] = None) -> str:
-        """Save model checkpoint."""
-        checkpoint = {
-            'epoch': epoch,
-            'step': step,
-            'model_state': model_state,
-            'optimizer_state': optimizer_state,
-            'metadata': metadata or {},
-            'timestamp': time.time(),
-        }
+    def __init__(self, checkpoint_dir: str = "checkpoints"):
+        """
+        Initialize model manager.
         
-        filename = f"checkpoint_epoch{epoch}_step{step}.json"
-        path = os.path.join(self.checkpoint_dir, filename)
-        
-        # Convert tensors to lists for JSON serialization
-        serializable = self._make_serializable(checkpoint)
-        
-        with open(path, 'w') as f:
-            json.dump(serializable, f)
-        
-        return path
+        Args:
+            checkpoint_dir: Directory for storing checkpoints
+        """
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self.metadata_file = self.checkpoint_dir / "metadata.json"
+        self.metadata: Dict[str, Any] = self._load_metadata()
     
-    def load_checkpoint(self, path: str) -> Dict[str, Any]:
-        """Load model checkpoint."""
-        with open(path, 'r') as f:
-            return json.load(f)
+    def _load_metadata(self) -> Dict[str, Any]:
+        """Load checkpoint metadata."""
+        if self.metadata_file.exists():
+            with open(self.metadata_file, 'r') as f:
+                return json.load(f)
+        return {'checkpoints': [], 'best_checkpoint': None}
     
-    def list_checkpoints(self) -> List[str]:
-        """List available checkpoints."""
-        if not os.path.exists(self.checkpoint_dir):
-            return []
-        return [f for f in os.listdir(self.checkpoint_dir) 
-                if f.startswith('checkpoint_')]
+    def _save_metadata(self):
+        """Save checkpoint metadata."""
+        with open(self.metadata_file, 'w') as f:
+            json.dump(self.metadata, f, indent=2)
     
-    def get_latest_checkpoint(self) -> Optional[str]:
-        """Get path to latest checkpoint."""
-        checkpoints = self.list_checkpoints()
-        if not checkpoints:
+    def save_checkpoint(self, name: str, state: Dict[str, Any], metrics: Optional[Dict[str, float]] = None) -> bool:
+        """
+        Save a model checkpoint.
+        
+        Args:
+            name: Checkpoint name
+            state: Model state dictionary
+            metrics: Optional performance metrics
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            checkpoint_path = self.checkpoint_dir / f"{name}.json"
+            
+            checkpoint_data = {
+                'name': name,
+                'state': state,
+                'metrics': metrics or {},
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            with open(checkpoint_path, 'w') as f:
+                json.dump(checkpoint_data, f, indent=2)
+            
+            self.metadata['checkpoints'].append({
+                'name': name,
+                'path': str(checkpoint_path),
+                'metrics': metrics or {},
+                'timestamp': checkpoint_data['timestamp']
+            })
+            
+            if metrics and 'loss' in metrics:
+                if not self.metadata['best_checkpoint'] or metrics['loss'] < self.metadata.get('best_loss', float('inf')):
+                    self.metadata['best_checkpoint'] = name
+                    self.metadata['best_loss'] = metrics['loss']
+            
+            self._save_metadata()
+            return True
+            
+        except Exception as e:
+            print(f"Failed to save checkpoint: {e}")
+            return False
+    
+    def load_checkpoint(self, name: str) -> Optional[Dict[str, Any]]:
+        """
+        Load a model checkpoint.
+        
+        Args:
+            name: Checkpoint name
+            
+        Returns:
+            Checkpoint data or None if not found
+        """
+        try:
+            checkpoint_path = self.checkpoint_dir / f"{name}.json"
+            
+            if not checkpoint_path.exists():
+                return None
+            
+            with open(checkpoint_path, 'r') as f:
+                return json.load(f)
+                
+        except Exception as e:
+            print(f"Failed to load checkpoint: {e}")
             return None
-        
-        # Sort by modification time
-        paths = [os.path.join(self.checkpoint_dir, f) for f in checkpoints]
-        paths.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-        return paths[0]
     
-    def _make_serializable(self, obj: Any) -> Any:
-        """Convert object to JSON-serializable format."""
-        if hasattr(obj, 'data'):  # Tensor-like
-            return {'_type': 'tensor', 'data': obj.data, 'shape': obj.shape.dims}
-        elif isinstance(obj, dict):
-            return {k: self._make_serializable(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [self._make_serializable(v) for v in obj]
-        return obj
+    def get_best_checkpoint(self) -> Optional[str]:
+        """Get name of best checkpoint by metrics."""
+        return self.metadata.get('best_checkpoint')
+    
+    def list_checkpoints(self) -> List[Dict[str, Any]]:
+        """List all available checkpoints."""
+        return self.metadata.get('checkpoints', [])
 
 
 class ExperienceDatabase:
-    """Store and retrieve interaction experiences."""
+    """
+    Logs and retrieves conversation interactions for learning.
     
-    def __init__(self, db_path: str = './experience.json'):
+    Features:
+        - Query-response pair logging
+        - Context tracking
+        - Feedback recording
+        - Experience replay
+    """
+    
+    def __init__(self, db_path: str = "experience.db"):
+        """
+        Initialize experience database.
+        
+        Args:
+            db_path: Path to SQLite database
+        """
         self.db_path = db_path
-        self.experiences: List[Dict[str, Any]] = []
-        self._load()
+        self.conn = sqlite3.connect(db_path)
+        self._create_tables()
     
-    def _load(self) -> None:
-        """Load experiences from file."""
-        if os.path.exists(self.db_path):
-            with open(self.db_path, 'r') as f:
-                self.experiences = json.load(f)
-    
-    def _save(self) -> None:
-        """Save experiences to file."""
-        with open(self.db_path, 'w') as f:
-            json.dump(self.experiences, f, indent=2)
-    
-    def add_experience(self, input_text: str, response: str,
-                       feedback: Optional[float] = None,
-                       metadata: Optional[Dict] = None) -> None:
-        """Add a new experience."""
-        experience = {
-            'id': len(self.experiences),
-            'input': input_text,
-            'response': response,
-            'feedback': feedback,
-            'metadata': metadata or {},
-            'timestamp': time.time(),
-        }
-        self.experiences.append(experience)
-        self._save()
-    
-    def get_experience(self, experience_id: int) -> Optional[Dict[str, Any]]:
-        """Get experience by ID."""
-        for exp in self.experiences:
-            if exp.get('id') == experience_id:
-                return exp
-        return None
-    
-    def search_experiences(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Search experiences by input text."""
-        query_lower = query.lower()
-        matching = []
+    def _create_tables(self):
+        """Create database tables."""
+        cursor = self.conn.cursor()
         
-        for exp in self.experiences:
-            if query_lower in exp['input'].lower():
-                matching.append(exp)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS experiences (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                query TEXT NOT NULL,
+                response TEXT NOT NULL,
+                context TEXT,
+                confidence REAL,
+                feedback INTEGER,
+                timestamp TEXT NOT NULL
+            )
+        """)
         
-        # Sort by relevance (simple matching for now)
-        matching.sort(key=lambda x: -x.get('feedback', 0) if x.get('feedback') else 0)
-        return matching[:limit]
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                experience_id INTEGER,
+                sequence_num INTEGER,
+                timestamp TEXT NOT NULL,
+                FOREIGN KEY (experience_id) REFERENCES experiences(id)
+            )
+        """)
+        
+        self.conn.commit()
     
-    def get_recent(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get recent experiences."""
-        return self.experiences[-limit:]
+    def log_experience(self, query: str, response: str, context: Optional[List[str]] = None, 
+                       confidence: float = 0.0) -> int:
+        """
+        Log a query-response interaction.
+        
+        Args:
+            query: User query
+            response: System response
+            context: Conversation context
+            confidence: Response confidence score
+            
+        Returns:
+            Experience ID
+        """
+        cursor = self.conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO experiences (query, response, context, confidence, feedback, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            query,
+            response,
+            json.dumps(context or []),
+            confidence,
+            0,
+            datetime.now().isoformat()
+        ))
+        
+        self.conn.commit()
+        return cursor.lastrowid
     
-    def update_feedback(self, experience_id: int, feedback: float) -> bool:
-        """Update feedback for an experience."""
-        for exp in self.experiences:
-            if exp.get('id') == experience_id:
-                exp['feedback'] = feedback
-                self._save()
-                return True
-        return False
+    def add_feedback(self, experience_id: int, feedback: int):
+        """
+        Add user feedback to an experience.
+        
+        Args:
+            experience_id: Experience ID
+            feedback: Feedback score (-1, 0, 1)
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("UPDATE experiences SET feedback = ? WHERE id = ?", (feedback, experience_id))
+        self.conn.commit()
     
-    def get_stats(self) -> Dict[str, Any]:
-        """Get database statistics."""
-        feedbacks = [e.get('feedback', 0) for e in self.experiences if e.get('feedback')]
-        return {
-            'total_experiences': len(self.experiences),
-            'with_feedback': len(feedbacks),
-            'avg_feedback': sum(feedbacks) / len(feedbacks) if feedbacks else 0,
-        }
+    def get_experiences(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Retrieve recent experiences.
+        
+        Args:
+            limit: Maximum number of experiences to return
+            
+        Returns:
+            List of experience dictionaries
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT id, query, response, context, confidence, feedback, timestamp
+            FROM experiences
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """, (limit,))
+        
+        experiences = []
+        for row in cursor.fetchall():
+            experiences.append({
+                'id': row[0],
+                'query': row[1],
+                'response': row[2],
+                'context': json.loads(row[3]) if row[3] else [],
+                'confidence': row[4],
+                'feedback': row[5],
+                'timestamp': row[6]
+            })
+        
+        return experiences
+    
+    def close(self):
+        """Close database connection."""
+        self.conn.close()
 
 
 class KnowledgeBase:
-    """Persistent knowledge storage."""
+    """
+    Persistent knowledge storage with semantic organization.
     
-    def __init__(self, kb_path: str = './knowledge.json'):
-        self.kb_path = kb_path
-        self.knowledge: Dict[str, Any] = {
-            'facts': {},
-            'concepts': {},
-            'relations': [],
-        }
-        self._load()
+    Features:
+        - Fact storage and retrieval
+        - Semantic indexing
+        - Knowledge graph construction
+        - Query-based search
+    """
     
-    def _load(self) -> None:
-        """Load knowledge from file."""
-        if os.path.exists(self.kb_path):
-            with open(self.kb_path, 'r') as f:
-                self.knowledge = json.load(f)
-    
-    def _save(self) -> None:
-        """Save knowledge to file."""
-        with open(self.kb_path, 'w') as f:
-            json.dump(self.knowledge, f, indent=2)
-    
-    def add_fact(self, key: str, value: Any, source: Optional[str] = None) -> None:
-        """Add a fact to knowledge base."""
-        self.knowledge['facts'][key] = {
-            'value': value,
-            'source': source,
-            'added': time.time(),
-        }
-        self._save()
-    
-    def get_fact(self, key: str) -> Optional[Any]:
-        """Get a fact from knowledge base."""
-        fact = self.knowledge['facts'].get(key)
-        return fact['value'] if fact else None
-    
-    def add_concept(self, name: str, definition: str, 
-                    related: Optional[List[str]] = None) -> None:
-        """Add a concept to knowledge base."""
-        self.knowledge['concepts'][name] = {
-            'definition': definition,
-            'related': related or [],
-            'added': time.time(),
-        }
-        self._save()
-    
-    def get_concept(self, name: str) -> Optional[Dict[str, Any]]:
-        """Get a concept from knowledge base."""
-        return self.knowledge['concepts'].get(name)
-    
-    def add_relation(self, subject: str, relation: str, object_: str) -> None:
-        """Add a relation between concepts."""
-        self.knowledge['relations'].append({
-            'subject': subject,
-            'relation': relation,
-            'object': object_,
-            'added': time.time(),
-        })
-        self._save()
-    
-    def query_relations(self, subject: Optional[str] = None,
-                        relation: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Query relations."""
-        results = []
-        for rel in self.knowledge['relations']:
-            if subject and rel['subject'] != subject:
-                continue
-            if relation and rel['relation'] != relation:
-                continue
-            results.append(rel)
-        return results
-    
-    def search(self, query: str) -> Dict[str, Any]:
-        """Search knowledge base."""
-        query_lower = query.lower()
+    def __init__(self, db_path: str = "knowledge.db"):
+        """
+        Initialize knowledge base.
         
-        matching_facts = {k: v for k, v in self.knowledge['facts'].items()
-                         if query_lower in k.lower()}
-        matching_concepts = {k: v for k, v in self.knowledge['concepts'].items()
-                            if query_lower in k.lower() or 
-                            query_lower in v.get('definition', '').lower()}
+        Args:
+            db_path: Path to SQLite database
+        """
+        self.db_path = db_path
+        self.conn = sqlite3.connect(db_path)
+        self._create_tables()
+    
+    def _create_tables(self):
+        """Create database tables."""
+        cursor = self.conn.cursor()
         
-        return {
-            'facts': matching_facts,
-            'concepts': matching_concepts,
-        }
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS facts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject TEXT NOT NULL,
+                predicate TEXT NOT NULL,
+                object TEXT NOT NULL,
+                confidence REAL DEFAULT 1.0,
+                source TEXT,
+                timestamp TEXT NOT NULL
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS entities (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                type TEXT,
+                properties TEXT,
+                timestamp TEXT NOT NULL
+            )
+        """)
+        
+        self.conn.commit()
+    
+    def add_fact(self, subject: str, predicate: str, obj: str, confidence: float = 1.0, source: str = "system"):
+        """
+        Add a fact to the knowledge base.
+        
+        Args:
+            subject: Fact subject
+            predicate: Fact relation
+            obj: Fact object
+            confidence: Confidence score
+            source: Fact source
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO facts (subject, predicate, object, confidence, source, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (subject, predicate, obj, confidence, source, datetime.now().isoformat()))
+        self.conn.commit()
+    
+    def query_facts(self, subject: Optional[str] = None, predicate: Optional[str] = None, 
+                    obj: Optional[str] = None) -> List[Tuple[str, str, str, float]]:
+        """
+        Query facts by subject, predicate, or object.
+        
+        Args:
+            subject: Optional subject filter
+            predicate: Optional predicate filter
+            obj: Optional object filter
+            
+        Returns:
+            List of (subject, predicate, object, confidence) tuples
+        """
+        cursor = self.conn.cursor()
+        
+        query = "SELECT subject, predicate, object, confidence FROM facts WHERE 1=1"
+        params = []
+        
+        if subject:
+            query += " AND subject = ?"
+            params.append(subject)
+        if predicate:
+            query += " AND predicate = ?"
+            params.append(predicate)
+        if obj:
+            query += " AND object = ?"
+            params.append(obj)
+        
+        cursor.execute(query, params)
+        return cursor.fetchall()
+    
+    def close(self):
+        """Close database connection."""
+        self.conn.close()
 
 
-# Export classes
-__all__ = [
-    'ModelManager',
-    'ExperienceDatabase',
-    'KnowledgeBase',
-]
+__all__ = ['ModelManager', 'ExperienceDatabase', 'KnowledgeBase']
+__version__ = '1.0.0'

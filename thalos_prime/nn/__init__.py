@@ -1,8 +1,10 @@
+#!/usr/bin/env python3
 """
-THALOS Prime - Neural Network Module
-Neural network layers, transformers, and model utilities.
+THALOS Prime Neural Network Module
+Pure Python implementation of neural network components
 """
 
+# Layer components
 from .layer import (
     Layer,
     Linear,
@@ -11,38 +13,45 @@ from .layer import (
     Dropout,
     Flatten,
     Reshape,
-    LayerNormLayer,
-    Sequential
+    LayerNorm,
+    BatchNorm1d,
+    Sequential,
 )
 
+# Transformer components
 from .transformer import (
     MultiHeadAttention,
     FeedForwardNetwork,
     TransformerBlock,
     TransformerEncoder,
     TransformerDecoder,
-    CrossAttentionBlock
+    CrossAttentionBlock,
 )
 
+# Models and training utilities
 from .model import (
     THALOSPrimeModel,
     ModelOptimizer,
     LossFunction,
-    LearningRateScheduler,
-    KVCache
+    SimpleClassifier,
+    Seq2SeqModel,
 )
 
 __all__ = [
-    # Layers
+    # Base layer
     'Layer',
+    
+    # Core layers
     'Linear',
     'Embedding',
     'PositionalEncoding',
     'Dropout',
     'Flatten',
     'Reshape',
-    'LayerNormLayer',
+    'LayerNorm',
+    'BatchNorm1d',
     'Sequential',
+    
     # Transformer components
     'MultiHeadAttention',
     'FeedForwardNetwork',
@@ -50,10 +59,16 @@ __all__ = [
     'TransformerEncoder',
     'TransformerDecoder',
     'CrossAttentionBlock',
-    # Model and training
+    
+    # Models
     'THALOSPrimeModel',
+    'SimpleClassifier',
+    'Seq2SeqModel',
+    
+    # Training utilities
     'ModelOptimizer',
     'LossFunction',
-    'LearningRateScheduler',
-    'KVCache',
 ]
+
+__version__ = '1.0.0'
+__author__ = 'THALOS Prime Team'

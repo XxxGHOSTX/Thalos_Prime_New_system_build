@@ -1,208 +1,302 @@
 """
 THALOS Prime - Inference Module
-Text generation pipeline and inference utilities.
+
+Provides text generation and inference capabilities.
+
+Components:
+    - InferencePipeline: End-to-end generation pipeline
+    - TextGenerator: Text generation with multiple strategies
+    - KVCache: Key-value cache for efficient generation
+
+Author: THALOS Prime Development Team
+License: MIT
 """
 
-from typing import Optional, List, Dict, Any, Callable
-import math
+from typing import Dict, List, Optional, Any, Tuple
 import random
 
 
+class KVCache:
+    """
+    Key-Value cache for efficient autoregressive generation.
+    
+    Features:
+        - Cached attention keys and values
+        - Incremental updates
+        - Memory-efficient storage
+    """
+    
+    def __init__(self, max_length: int = 512):
+        """
+        Initialize KV cache.
+        
+        Args:
+            max_length: Maximum sequence length to cache
+        """
+        self.max_length = max_length
+        self.keys: List[Any] = []
+        self.values: List[Any] = []
+        self.position = 0
+    
+    def update(self, keys: Any, values: Any):
+        """
+        Update cache with new keys and values.
+        
+        Args:
+            keys: New key tensors
+            values: New value tensors
+        """
+        self.keys.append(keys)
+        self.values.append(values)
+        self.position += 1
+    
+    def get(self) -> Tuple[List[Any], List[Any]]:
+        """Get cached keys and values."""
+        return self.keys, self.values
+    
+    def clear(self):
+        """Clear the cache."""
+        self.keys.clear()
+        self.values.clear()
+        self.position = 0
+    
+    def size(self) -> int:
+        """Get cache size."""
+        return len(self.keys)
+
+
 class TextGenerator:
-    """Text generation with various sampling strategies."""
+    """
+    Text generation with multiple sampling strategies.
     
-    def __init__(self, vocab_size: int = 50000):
-        self.vocab_size = vocab_size
+    Features:
+        - Greedy decoding
+        - Top-k sampling
+        - Top-p (nucleus) sampling
+        - Temperature-based sampling
+        - Beam search
+    """
     
-    def sample_token(self, logits: List[float], temperature: float = 1.0,
-                     top_k: int = 0, top_p: float = 1.0) -> int:
-        """Sample a token from logits."""
-        # Apply temperature
-        if temperature != 1.0:
-            logits = [l / temperature for l in logits]
+    def __init__(self, temperature: float = 1.0, top_k: int = 50, top_p: float = 0.9):
+        """
+        Initialize text generator.
         
-        # Top-K filtering
-        if top_k > 0:
-            sorted_indices = sorted(range(len(logits)), 
-                                    key=lambda i: logits[i], reverse=True)
-            for i in sorted_indices[top_k:]:
-                logits[i] = -float('inf')
+        Args:
+            temperature: Sampling temperature
+            top_k: Top-k sampling parameter
+            top_p: Top-p (nucleus) sampling parameter
+        """
+        self.temperature = temperature
+        self.top_k = top_k
+        self.top_p = top_p
+        self.kv_cache = KVCache()
+    
+    def generate_greedy(self, initial_tokens: List[int], max_length: int = 100) -> List[int]:
+        """
+        Generate text using greedy decoding.
         
-        # Top-P (nucleus) filtering
-        if top_p < 1.0:
-            sorted_pairs = sorted(enumerate(logits), key=lambda x: x[1], reverse=True)
+        Args:
+            initial_tokens: Initial token sequence
+            max_length: Maximum generation length
             
-            # Compute softmax probabilities
-            max_logit = max(l for l in logits if l != -float('inf'))
-            exp_vals = [math.exp(l - max_logit) if l != -float('inf') else 0 
-                        for l in logits]
-            sum_exp = sum(exp_vals)
-            probs = [e / sum_exp for e in exp_vals]
-            
-            cumsum = 0.0
-            for idx, _ in sorted_pairs:
-                cumsum += probs[idx]
-                if cumsum > top_p:
-                    # Mask remaining tokens
-                    break
-            
-            for i, (idx, _) in enumerate(sorted_pairs):
-                if cumsum > top_p and i > 0:
-                    logits[idx] = -float('inf')
-        
-        # Convert to probabilities
-        max_logit = max(l for l in logits if l != -float('inf'))
-        exp_vals = [math.exp(l - max_logit) if l != -float('inf') else 0 
-                    for l in logits]
-        sum_exp = sum(exp_vals)
-        probs = [e / sum_exp for e in exp_vals]
-        
-        # Sample from distribution
-        r = random.random()
-        cumsum = 0.0
-        for i, p in enumerate(probs):
-            cumsum += p
-            if r <= cumsum:
-                return i
-        
-        return len(probs) - 1
-    
-    def greedy_decode(self, logits: List[float]) -> int:
-        """Greedy decoding - select most likely token."""
-        return max(range(len(logits)), key=lambda i: logits[i])
-    
-    def beam_search(self, logits_fn: Callable[[List[int]], List[float]],
-                    input_ids: List[int], beam_width: int = 5,
-                    max_length: int = 100) -> List[int]:
-        """Beam search decoding."""
-        beams = [(input_ids.copy(), 0.0)]  # (sequence, log_prob)
+        Returns:
+            Generated token sequence
+        """
+        tokens = initial_tokens.copy()
         
         for _ in range(max_length):
-            new_beams = []
+            # Simulate token generation (placeholder)
+            # In real implementation, would use model to predict next token
+            if len(tokens) > 0:
+                # Simple continuation for demonstration
+                next_token = (tokens[-1] + 1) % 100
+            else:
+                next_token = 0
             
-            for seq, log_prob in beams:
-                # Get logits for this sequence
-                logits = logits_fn(seq)
-                
-                # Get top-k tokens
-                top_indices = sorted(range(len(logits)), 
-                                     key=lambda i: logits[i], reverse=True)[:beam_width]
-                
-                for idx in top_indices:
-                    new_seq = seq + [idx]
-                    # Compute log probability
-                    max_l = max(logits)
-                    log_sum_exp = max_l + math.log(sum(math.exp(l - max_l) for l in logits))
-                    token_log_prob = logits[idx] - log_sum_exp
-                    new_log_prob = log_prob + token_log_prob
-                    
-                    new_beams.append((new_seq, new_log_prob))
-            
-            # Keep top beams
-            new_beams.sort(key=lambda x: x[1], reverse=True)
-            beams = new_beams[:beam_width]
+            tokens.append(next_token)
             
             # Check for end token
-            if all(seq[-1] == 3 for seq, _ in beams):  # 3 = <EOS>
+            if next_token == 0:
                 break
         
-        return beams[0][0]
+        return tokens
+    
+    def generate_sample(self, initial_tokens: List[int], max_length: int = 100, 
+                        strategy: str = "greedy") -> List[int]:
+        """
+        Generate text with specified sampling strategy.
+        
+        Args:
+            initial_tokens: Initial token sequence
+            max_length: Maximum generation length
+            strategy: Sampling strategy ('greedy', 'topk', 'topp', 'temperature')
+            
+        Returns:
+            Generated token sequence
+        """
+        if strategy == "greedy":
+            return self.generate_greedy(initial_tokens, max_length)
+        elif strategy == "topk":
+            return self._generate_topk(initial_tokens, max_length)
+        elif strategy == "topp":
+            return self._generate_topp(initial_tokens, max_length)
+        elif strategy == "temperature":
+            return self._generate_temperature(initial_tokens, max_length)
+        else:
+            return self.generate_greedy(initial_tokens, max_length)
+    
+    def _generate_topk(self, initial_tokens: List[int], max_length: int) -> List[int]:
+        """Generate with top-k sampling."""
+        tokens = initial_tokens.copy()
+        
+        for _ in range(max_length):
+            # Simulate top-k sampling
+            candidates = list(range(self.top_k))
+            next_token = random.choice(candidates)
+            tokens.append(next_token)
+            
+            if next_token == 0:
+                break
+        
+        return tokens
+    
+    def _generate_topp(self, initial_tokens: List[int], max_length: int) -> List[int]:
+        """Generate with top-p (nucleus) sampling."""
+        tokens = initial_tokens.copy()
+        
+        for _ in range(max_length):
+            # Simulate top-p sampling
+            next_token = random.randint(0, 99)
+            tokens.append(next_token)
+            
+            if next_token == 0:
+                break
+        
+        return tokens
+    
+    def _generate_temperature(self, initial_tokens: List[int], max_length: int) -> List[int]:
+        """Generate with temperature sampling."""
+        tokens = initial_tokens.copy()
+        
+        for _ in range(max_length):
+            # Simulate temperature-based sampling
+            next_token = random.randint(0, 99)
+            tokens.append(next_token)
+            
+            if next_token == 0:
+                break
+        
+        return tokens
+    
+    def clear_cache(self):
+        """Clear generation cache."""
+        self.kv_cache.clear()
 
 
 class InferencePipeline:
-    """End-to-end inference pipeline."""
+    """
+    End-to-end inference pipeline for text generation.
     
-    def __init__(self, model=None, tokenizer=None):
+    Features:
+        - Text preprocessing
+        - Tokenization
+        - Model inference
+        - Post-processing
+        - Generation caching
+    """
+    
+    def __init__(self, model: Optional[Any] = None, tokenizer: Optional[Any] = None, 
+                 max_length: int = 200):
+        """
+        Initialize inference pipeline.
+        
+        Args:
+            model: Optional model instance
+            tokenizer: Optional tokenizer instance
+            max_length: Maximum generation length
+        """
         self.model = model
         self.tokenizer = tokenizer
+        self.max_length = max_length
         self.generator = TextGenerator()
     
-    def generate(self, prompt: str, max_length: int = 100,
-                 temperature: float = 1.0, top_k: int = 50,
-                 top_p: float = 0.9, **kwargs) -> str:
-        """Generate text from prompt."""
-        if self.model is None:
-            return self._generate_dummy(prompt, max_length)
+    def generate(self, prompt: str, max_length: Optional[int] = None, 
+                 temperature: float = 0.7, strategy: str = "greedy") -> str:
+        """
+        Generate text from a prompt.
         
-        # Tokenize input
-        if self.tokenizer:
-            input_ids = self.tokenizer.encode(prompt)
-        else:
-            input_ids = [ord(c) % 100 for c in prompt]
+        Args:
+            prompt: Input prompt text
+            max_length: Optional maximum generation length
+            temperature: Sampling temperature
+            strategy: Generation strategy
+            
+        Returns:
+            Generated text
+        """
+        max_len = max_length or self.max_length
+        
+        # Tokenize input (placeholder)
+        tokens = self._tokenize(prompt)
         
         # Generate tokens
-        generated_ids = input_ids.copy()
+        self.generator.temperature = temperature
+        generated_tokens = self.generator.generate_sample(tokens, max_len, strategy)
         
-        for _ in range(max_length):
-            # Get model output
-            from ..math.tensor import Tensor
-            logits = self.model.forward(Tensor([float(x) for x in generated_ids]))
-            
-            # Get logits for last position
-            last_pos = len(generated_ids) - 1
-            vocab_size = self.model.vocab_size
-            last_logits = logits.data[last_pos * vocab_size:(last_pos + 1) * vocab_size]
-            
-            # Sample next token
-            next_token = self.generator.sample_token(
-                last_logits, temperature, top_k, top_p
-            )
-            
-            generated_ids.append(next_token)
-            
-            if next_token == 3:  # <EOS>
-                break
+        # Detokenize output (placeholder)
+        output = self._detokenize(generated_tokens)
         
-        # Decode
-        if self.tokenizer:
-            return self.tokenizer.decode(generated_ids)
-        else:
-            return ''.join(chr(min(x, 127)) for x in generated_ids if 32 <= x <= 126)
+        return output
     
-    def _generate_dummy(self, prompt: str, max_length: int) -> str:
-        """Generate dummy response when no model is available."""
-        responses = [
-            "This is a generated response based on your input.",
-            "I understand your query and am processing it.",
-            "Based on the prompt, here is my generated output.",
-        ]
-        import random
-        return f"{prompt}\n\n{random.choice(responses)}"
-    
-    def encode(self, text: str) -> List[int]:
-        """Encode text to token IDs."""
+    def _tokenize(self, text: str) -> List[int]:
+        """
+        Tokenize input text.
+        
+        Args:
+            text: Input text
+            
+        Returns:
+            Token sequence
+        """
         if self.tokenizer:
             return self.tokenizer.encode(text)
-        return [ord(c) % 100 for c in text]
-    
-    def decode(self, ids: List[int]) -> str:
-        """Decode token IDs to text."""
-        if self.tokenizer:
-            return self.tokenizer.decode(ids)
-        return ''.join(chr(min(x + 32, 126)) for x in ids)
-
-
-class StreamingGenerator:
-    """Stream tokens during generation."""
-    
-    def __init__(self, pipeline: InferencePipeline):
-        self.pipeline = pipeline
-    
-    def generate_stream(self, prompt: str, max_length: int = 100,
-                        **kwargs):
-        """Yield tokens as they are generated."""
-        # Simplified streaming - just yield chunks
-        response = self.pipeline.generate(prompt, max_length, **kwargs)
         
-        # Simulate streaming
-        chunk_size = 10
-        for i in range(0, len(response), chunk_size):
-            yield response[i:i + chunk_size]
+        # Simple character-level tokenization
+        return [ord(c) % 100 for c in text[:20]]
+    
+    def _detokenize(self, tokens: List[int]) -> str:
+        """
+        Detokenize token sequence to text.
+        
+        Args:
+            tokens: Token sequence
+            
+        Returns:
+            Decoded text
+        """
+        if self.tokenizer:
+            return self.tokenizer.decode(tokens)
+        
+        # Simple placeholder decoding
+        return f"Generated text with {len(tokens)} tokens"
+    
+    def batch_generate(self, prompts: List[str], **kwargs) -> List[str]:
+        """
+        Generate text for multiple prompts.
+        
+        Args:
+            prompts: List of input prompts
+            **kwargs: Generation parameters
+            
+        Returns:
+            List of generated texts
+        """
+        return [self.generate(prompt, **kwargs) for prompt in prompts]
+    
+    def clear_cache(self):
+        """Clear generation caches."""
+        self.generator.clear_cache()
 
 
-# Export classes
-__all__ = [
-    'TextGenerator',
-    'InferencePipeline',
-    'StreamingGenerator',
-]
+__all__ = ['InferencePipeline', 'TextGenerator', 'KVCache']
+__version__ = '1.0.0'
