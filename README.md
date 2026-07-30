@@ -23,8 +23,15 @@ THALOS Prime is a comprehensive AI system built from the ground up with custom i
 - **Security**: Built-in encryption and hashing
 - **Reasoning**: Semantic analysis with behavioral modeling
 
-## Quick Start
+## Quick Start (Windows)
 
+### Option 1: Use Launcher Scripts (Easiest)
+Double-click any of these Windows batch files:
+- `LAUNCH.bat` - Start THALOS Prime in interactive mode
+- `LAUNCH_GUI.bat` - Start the GUI interface
+- `LAUNCH_ADVANCED_GUI.bat` - Start the advanced GUI
+
+### Option 2: Command Line
 ```bash
 # Run interactive session
 python main.py --interactive
@@ -32,42 +39,85 @@ python main.py --interactive
 # Process a single query
 python main.py --query "What is machine learning?"
 
-# Run system tests
-python test_system.py
-
 # Run GUI
 python thalos_prime_gui.py
+
+# Run system tests
+python test_system.py
 ```
+
+## Installation (Windows)
+
+1. **Install Python 3.11 or higher**
+   - Download from [python.org](https://www.python.org/downloads/)
+   - During installation, check "Add Python to PATH"
+
+2. **Clone or Download this repository**
+   - Extract all files to a folder (e.g., `C:\ThalosApp`)
+
+3. **Run the application**
+   - Double-click `LAUNCH.bat` to start
+
+No additional dependencies are required for core functionality!
 
 ## Project Structure
 
 ```
-thalos_prime/
-├── math/          # Tensor operations, linear algebra, activations
-├── nn/            # Neural network layers, transformers
-├── encoding/      # Text tokenization
-├── crypto/        # Encryption and hashing
-├── kernel/        # Memory management, filesystem
-├── reasoning/     # SBI reasoning engine
-├── core/          # Main orchestrator
-├── config/        # Configuration management
-├── storage/       # Data persistence
-├── inference/     # Text generation
-├── utils/         # Utilities
-├── database/      # Database operations
-└── wetware/       # Bio-inspired computing
-
-thalos_sbi_standalone/
-├── core_engine.py
-├── code_generator.py
-├── nlp_module.py
-└── ...
+ThalosApp/
+├── LAUNCH.bat              # Windows launcher (interactive mode)
+├── LAUNCH_GUI.bat          # GUI launcher
+├── LAUNCH_ADVANCED_GUI.bat # Advanced GUI launcher
+├── main.py                 # Main entry point
+├── app.py                  # Web application
+├── requirements.txt        # Optional dependencies
+├── pyproject.toml         # Project configuration
+│
+├── thalos_prime/          # Core AI system modules
+│   ├── math/              # Tensor operations, linear algebra
+│   ├── nn/                # Neural network layers, transformers
+│   ├── encoding/          # Text tokenization
+│   ├── crypto/            # Encryption and hashing
+│   ├── kernel/            # Memory management, filesystem
+│   ├── reasoning/         # SBI reasoning engine
+│   ├── core/              # Main orchestrator
+│   ├── config/            # Configuration management
+│   ├── storage/           # Data persistence
+│   ├── inference/         # Text generation
+│   ├── utils/             # Utilities
+│   ├── database/          # Database operations
+│   └── wetware/           # Bio-inspired computing
+│
+├── thalos_sbi_standalone/ # Standalone SBI system
+│   ├── core_engine.py
+│   ├── code_generator.py
+│   ├── nlp_module.py
+│   └── ...
+│
+├── docs/                  # All documentation
+│   ├── QUICKSTART.md
+│   ├── ARCHITECTURE.md
+│   └── ...
+│
+├── scripts/               # Utility and helper scripts
+│   ├── master_builder.py
+│   ├── system_validator.py
+│   └── ...
+│
+├── tests/                 # Test files
+│   └── test_gui_import.py
+│
+├── data/                  # Database files (auto-created)
+│   └── (database files stored here)
+│
+└── thalos_storage/        # Application data storage
 ```
 
 ## Requirements
 
-- Python 3.11+
+- **Python 3.11+** (required)
+- **Windows 7 or higher** (recommended: Windows 10/11)
 - No external dependencies for core functionality
+- Optional dependencies available in `requirements.txt` for enhanced features
 
 ## License
 
@@ -75,7 +125,13 @@ Proprietary - THALOS Prime Systems
 
 ## Documentation
 
-See the following documentation files:
-- `ARCHITECTURE.md` - Technical architecture
-- `QUICKSTART.md` - Quick start guide
-- `FILE_INDEX.md` - Complete file listing
+All documentation is located in the `docs/` folder:
+- `docs/QUICKSTART.md` - Quick start guide
+- `docs/ARCHITECTURE.md` - Technical architecture
+- `docs/FILE_INDEX.md` - Complete file listing
+- `docs/GUI_README.md` - GUI usage guide
+- `docs/QUICK_REFERENCE.md` - Quick reference guide
+
+## Support
+
+For issues or questions, please refer to the documentation in the `docs/` folder.
