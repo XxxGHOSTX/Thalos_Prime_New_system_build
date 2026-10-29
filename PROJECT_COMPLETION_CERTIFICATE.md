@@ -1,8 +1,10 @@
-# THALOS Prime Project Completion Certificate
+# THALOS Prime Project Completion Certificate — Historical Record
 
-## Certification
+> **Status correction (29 October 2026): historical record only.** This certificate is dated 4 February 2026. It is not a current verification of implementation, test results, or deployment readiness. The current `docs/THALOS_CORE_FORMALISM.md` states that the repository does not yet define a canonical epistemic kernel. The original completion statements below are preserved as historical assertions and must not be used as a current release sign-off.
 
-This certifies that the THALOS Prime v3.1.0 system has been:
+## Historical certification statement (recorded 4 February 2026)
+
+The original certificate asserted that the THALOS Prime v3.1.0 system had been:
 
 - ✅ Fully implemented according to specifications
 - ✅ Tested and verified
@@ -19,5 +21,5 @@ This certifies that the THALOS Prime v3.1.0 system has been:
 ## Verification Date
 2026-02-04
 
-## Status
-CERTIFIED COMPLETE
+## Historical status assertion
+HISTORICAL CLAIM — NOT A CURRENT RELEASE STATUS
